@@ -42,7 +42,7 @@ object search extends VpiModule {
 }
 
 object cli extends VpiModule {
-  override def moduleDeps = Seq(ingest)
+  override def moduleDeps = Seq(ingest, search)
   override def mvnDeps = Task { Seq(
     mvn"com.monovore::decline-effect:2.4.1",
   )}

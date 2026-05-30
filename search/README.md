@@ -33,12 +33,12 @@ The `cli` module wraps `Indexer.indexAll`. It walks an OCR directory tree of the
 mill cli.run --db /path/to/index.db --ocr-dir /path/to/ocr/root
 ```
 
-Example (from the repo root):
+Example (from the `search/` directory):
 
 ```sh
-mill -C search cli.run \
-  --db data/index.db \
-  --ocr-dir data/thanh-nghi/ocr/20260405_gc_vision
+mill cli.run index \
+  --db ../data/index.db \
+  --ocr-dir ../data/thanh-nghi/ocr/20260405_gc_vision
 ```
 
 Progress is printed per file:
