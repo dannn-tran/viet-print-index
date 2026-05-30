@@ -26,19 +26,24 @@ object Indexer:
   def parseGcv(content: String): Either[io.circe.Error, String] =
     decode[GcvResponse](content).map(_.fullTextAnnotation.text)
 
-  def indexAll(dbPath: String, ocrBaseDir: String): IO[Unit] =
+  def indexAll(
+    dbPath: String,
+    ocrBaseDir: String,
+    onProgress: (Int, Int, String) => IO[Unit] = (_, _, _) => IO.unit,
+  ): IO[Unit] =
     val xa       = Db.transactor(dbPath)
     val basePath = Paths.get(ocrBaseDir)
     for
       _     <- Schema.createTables.transact(xa)
       files <- IO.blocking(listJsonFiles(basePath))
-      inserts <- files.traverse { file =>
-        IO.blocking(Files.readAllBytes(file)).map { bytes =>
-          parseGcv(new String(bytes, "UTF-8")) match
-            case Right(text) =>
-              val filePath = basePath.relativize(file).toString
-              Some(insertPage(filePath, text, Normalize.normalize(text)))
-            case Left(_) => None
+      total  = files.length
+      inserts <- files.zipWithIndex.traverse { case (file, idx) =>
+        IO.blocking(Files.readAllBytes(file)).flatMap { bytes =>
+          val filePath = basePath.relativize(file).toString
+          val insert = parseGcv(new String(bytes, "UTF-8")) match
+            case Right(text) => Some(insertPage(filePath, text, Normalize.normalize(text)))
+            case Left(_)     => None
+          onProgress(idx + 1, total, filePath).as(insert)
         }
       }
       _ <- inserts.flatten.sequence_.transact(xa)

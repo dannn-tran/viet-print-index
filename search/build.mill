@@ -1,0 +1,51 @@
+package build
+
+import mill._
+import mill.scalalib._
+
+val scalaVer = "3.3.4"
+
+val munitDeps: Seq[Dep] = Seq(
+  mvn"org.scalameta::munit:1.0.3",
+  mvn"org.typelevel::munit-cats-effect:2.0.0",
+)
+
+trait VpiModule extends ScalaModule {
+  def scalaVersion = scalaVer
+
+  trait Tests extends ScalaTests with TestModule.Munit {
+    override def mvnDeps = Task { munitDeps }
+  }
+}
+
+object db extends VpiModule {
+  override def mvnDeps = Task { Seq(
+    mvn"org.tpolecat::doobie-core:1.0.0-RC5",
+    mvn"org.typelevel::cats-effect:3.5.7",
+    mvn"org.xerial:sqlite-jdbc:3.47.1.0",
+  )}
+  object test extends Tests
+}
+
+object ingest extends VpiModule {
+  override def moduleDeps = Seq(db)
+  override def mvnDeps = Task { Seq(
+    mvn"io.circe::circe-core:0.14.10",
+    mvn"io.circe::circe-generic:0.14.10",
+    mvn"io.circe::circe-parser:0.14.10",
+  )}
+  object test extends Tests
+}
+
+object search extends VpiModule {
+  override def moduleDeps = Seq(db)
+  object test extends Tests
+}
+
+object cli extends VpiModule {
+  override def moduleDeps = Seq(ingest)
+  override def mvnDeps = Task { Seq(
+    mvn"com.monovore::decline-effect:2.4.1",
+  )}
+  override def mainClass = Some("vpi.cli.Main")
+}
