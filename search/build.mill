@@ -31,7 +31,6 @@ object ingest extends VpiModule {
   override def moduleDeps = Seq(db)
   override def mvnDeps = Task { Seq(
     mvn"io.circe::circe-core:0.14.10",
-    mvn"io.circe::circe-generic:0.14.10",
     mvn"io.circe::circe-parser:0.14.10",
   )}
   object test extends Tests
