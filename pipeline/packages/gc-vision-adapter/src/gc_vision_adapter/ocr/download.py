@@ -2,10 +2,9 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import PurePosixPath, Path
+from pathlib import Path, PurePosixPath
 
 from google.cloud import storage
-
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +33,24 @@ def download_ocr(project_id: str, cmd: DownloadOcrResultToLocalCommand):
         for _ in executor.map(lambda b: _download_one(dst_dirpath, b), blobs):
             pass
 
+
 def _download_one(dst_dirpath: Path, blob: storage.Blob):
-    if not blob.name.endswith('.json'):
-        return
-    # TODO: skip download if file already downloaded
-    for uri, resp in _explode(blob):
-        p = PurePosixPath(uri)
-        dst_dirpath.mkdir(parents=True, exist_ok=True)
-        dst = dst_dirpath / f"{p.stem}.json"
-        with open(dst, "w") as f:
-            json.dump(resp, f)
-        logger.info(f"Written {dst}.")
+    try:
+        if not blob.name.endswith(".json"):
+            return
+        # TODO: skip download if file already downloaded
+        for uri, resp in _explode(blob):
+            p = PurePosixPath(uri)
+            dirpath = dst_dirpath / p.parent.name
+            dirpath.mkdir(parents=True, exist_ok=True)
+            dst = dirpath / f"{p.stem}.json"
+            with open(dst, "w") as f:
+                json.dump(resp, f)
+            logger.info(f"Written {dst}.")
+    except Exception as e:
+        logger.error(e)
+        raise e
+
 
 def _explode(blob: storage.Blob):
     logger.info(f"Download starting - {blob.name}...")
@@ -56,7 +62,7 @@ def _explode(blob: storage.Blob):
         logger.info(f"No responses in {blob.name}")
 
     for i, resp in enumerate(responses):
-        uri = resp.get('context', dict()).get('uri')
+        uri = resp.get("context", dict()).get("uri")
         if not uri:
             logger.warning(f"No URI found for response at index {i} of {blob.name}")
             continue
