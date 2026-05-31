@@ -16,11 +16,11 @@ class SearchSpec extends munit.CatsEffectSuite:
     )
   )
 
-  private def insertPage(filePath: String, text: String): ConnectionIO[Unit] =
+  private def insertPage(imageUri: String, text: String): ConnectionIO[Unit] =
     val textNorm = Normalize.normalize(text)
     for
-      _ <- sql"INSERT OR IGNORE INTO pages(file_path, text, text_norm) VALUES($filePath, $text, $textNorm)".update.run
-      _ <- sql"INSERT OR IGNORE INTO pages_fts(file_path, text_norm) VALUES($filePath, $textNorm)".update.run
+      _ <- sql"INSERT OR IGNORE INTO pages(image_uri, text, text_norm) VALUES($imageUri, $text, $textNorm)".update.run
+      _ <- sql"INSERT OR IGNORE INTO pages_fts(image_uri, text_norm) VALUES($imageUri, $textNorm)".update.run
     yield ()
 
   private def setup(dbPath: String, pages: (String, String)*): IO[Transactor[IO]] =
@@ -31,31 +31,32 @@ class SearchSpec extends munit.CatsEffectSuite:
     yield xa
 
   tempDb.test("finds page containing query term") { dbPath =>
+    val uri = "gs://vie-doc/thanh-nghi/images/105/000.png"
     for
-      xa      <- setup(dbPath.toString, "105/000.json" -> "Hội nghị Yalta bàn về tình hình")
+      xa      <- setup(dbPath.toString, uri -> "Hội nghị Yalta bàn về tình hình")
       results <- Search.search("hội nghị").transact(xa)
     yield
       assertEquals(results.length, 1)
-      assertEquals(results.head.filePath, "105/000.json")
+      assertEquals(results.head.imageUri, uri)
   }
 
   tempDb.test("diacritic normalization: search without tones finds original") { dbPath =>
     for
-      xa      <- setup(dbPath.toString, "105/000.json" -> "Hội nghị Yalta")
+      xa      <- setup(dbPath.toString, "gs://vie-doc/images/105/000.png" -> "Hội nghị Yalta")
       results <- Search.search("hoi nghi").transact(xa)
     yield assertEquals(results.length, 1)
   }
 
   tempDb.test("trigram substring match") { dbPath =>
     for
-      xa      <- setup(dbPath.toString, "105/000.json" -> "Hội nghị Yalta")
+      xa      <- setup(dbPath.toString, "gs://vie-doc/images/105/000.png" -> "Hội nghị Yalta")
       results <- Search.search("nghi").transact(xa)
     yield assertEquals(results.length, 1)
   }
 
   tempDb.test("absent term returns empty list") { dbPath =>
     for
-      xa      <- setup(dbPath.toString, "105/000.json" -> "Hội nghị Yalta")
+      xa      <- setup(dbPath.toString, "gs://vie-doc/images/105/000.png" -> "Hội nghị Yalta")
       results <- Search.search("xyznotfound").transact(xa)
     yield assertEquals(results, Nil)
   }
@@ -64,13 +65,13 @@ class SearchSpec extends munit.CatsEffectSuite:
     for
       xa <- setup(
         dbPath.toString,
-        "105/000.json" -> "Hội nghị Yalta",
-        "105/001.json" -> "Tình hình kinh tế",
-        "105/002.json" -> "Hội nghị Paris",
+        "gs://vie-doc/images/105/000.png" -> "Hội nghị Yalta",
+        "gs://vie-doc/images/105/001.png" -> "Tình hình kinh tế",
+        "gs://vie-doc/images/105/002.png" -> "Hội nghị Paris",
       )
       results <- Search.search("hội nghị").transact(xa)
     yield
       assertEquals(results.length, 2)
-      assert(results.map(_.filePath).contains("105/000.json"))
-      assert(results.map(_.filePath).contains("105/002.json"))
+      assert(results.map(_.imageUri).contains("gs://vie-doc/images/105/000.png"))
+      assert(results.map(_.imageUri).contains("gs://vie-doc/images/105/002.png"))
   }

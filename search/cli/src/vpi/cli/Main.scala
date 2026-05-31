@@ -6,7 +6,7 @@ import com.monovore.decline.*
 import com.monovore.decline.effect.*
 import doobie.implicits.*
 import vpi.db.Db
-import vpi.ingest.Indexer
+import vpi.ingest.{GcsIndexer, Indexer}
 import vpi.search.Search
 
 object Main extends CommandIOApp(
@@ -35,15 +35,26 @@ object Main extends CommandIOApp(
       }
     }
 
-    indexCmd orElse searchCmd
+    val indexGcsCmd = Opts.subcommand("index-gcs", "Index OCR from GCS bucket into SQLite (resumable)") {
+      val bucketOpt = Opts.option[String]("bucket", help = "GCS bucket name", metavar = "bucket")
+      val prefixOpt = Opts.option[String]("prefix", help = "Blob prefix", metavar = "prefix")
+      (dbOpt, bucketOpt, prefixOpt).mapN { (db, bucket, prefix) =>
+        def onProgress(current: Int, total: Int, blobName: String, pages: Int): IO[Unit] =
+          IO.println(f"[$current%5d/$total] $blobName ($pages pages)")
+        GcsIndexer.indexAll(db, bucket, prefix, onProgress) >> IO.println("Done.").as(ExitCode.Success)
+      }
+    }
+
+    indexCmd orElse indexGcsCmd orElse searchCmd
 
   private def repl(xa: doobie.Transactor[IO]): IO[Unit] =
     IO.print("> ") >> IO.readLine.flatMap {
-      case null  => IO.println("")
-      case ""    => repl(xa)
-      case query =>
-        Search.search(query).transact(xa).flatMap { results =>
-          results.traverse_(r => IO.println(s"${r.filePath}\t${r.snippet}")) >>
+      case null     => IO.println("")
+      case ""       => repl(xa)
+      case "/clear" => IO.print("[H[2J") >> repl(xa)
+      case input    =>
+        Search.search(input.trim).transact(xa).flatMap { results =>
+          results.traverse_(r => IO.println(s"${r.imageUri}\t${r.snippet}")) >>
           IO.println(s"(${results.size} results)") >>
           repl(xa)
         }

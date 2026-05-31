@@ -12,20 +12,14 @@ import vpi.db.{Db, Normalize, Schema}
 
 object Indexer:
 
-  def insertPage(filePath: String, text: String, textNorm: String): ConnectionIO[Unit] =
+  def insertPage(imageUri: String, text: String, textNorm: String): ConnectionIO[Unit] =
     for
-      _ <- sql"""
-        INSERT OR IGNORE INTO pages(file_path, text, text_norm)
-        VALUES($filePath, $text, $textNorm)
-      """.update.run
-      _ <- sql"""
-        INSERT OR IGNORE INTO pages_fts(file_path, text_norm)
-        VALUES($filePath, $textNorm)
-      """.update.run
+      _ <- sql"""INSERT OR IGNORE INTO pages(image_uri, text, text_norm) VALUES($imageUri, $text, $textNorm)""".update.run
+      _ <- sql"""INSERT OR IGNORE INTO pages_fts(image_uri, text_norm) VALUES($imageUri, $textNorm)""".update.run
     yield ()
 
-  def parseGcv(content: String): Either[io.circe.Error, String] =
-    decode[GcvResponse](content).map(_.fullTextAnnotation.text)
+  def parseGcv(content: String): Option[(String, String)] =
+    decode[GcvResponse](content).toOption.flatMap(extractPage)
 
   def indexAll(
     dbPath: String,
@@ -43,8 +37,8 @@ object Indexer:
             val filePath = basePath.relativize(file).toString
             IO.blocking(Files.readAllBytes(file)).flatMap { bytes =>
               val insert = parseGcv(new String(bytes, "UTF-8")) match
-                case Right(text) => Some(insertPage(filePath, text, Normalize.normalize(text)))
-                case Left(_)     => None
+                case Some((uri, text)) => Some(insertPage(uri, text, Normalize.normalize(text)))
+                case None              => None
               onProgress(idx + 1, total, filePath).as(insert)
             }
           }

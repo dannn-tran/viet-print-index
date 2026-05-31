@@ -8,16 +8,22 @@ object Schema:
     for
       _ <- sql"""
         CREATE TABLE IF NOT EXISTS pages (
-          file_path TEXT NOT NULL PRIMARY KEY,
+          image_uri TEXT NOT NULL PRIMARY KEY,
           text      TEXT NOT NULL,
           text_norm TEXT NOT NULL
         )
       """.update.run
       _ <- sql"""
         CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-          file_path UNINDEXED,
+          image_uri UNINDEXED,
           text_norm,
           tokenize='trigram'
+        )
+      """.update.run
+      _ <- sql"""
+        CREATE TABLE IF NOT EXISTS gcs_blobs (
+          blob_name  TEXT NOT NULL PRIMARY KEY,
+          indexed_at TEXT NOT NULL
         )
       """.update.run
     yield ()
