@@ -27,28 +27,30 @@ class IndexerSpec extends munit.CatsEffectSuite:
   }
 
   tempDb.test("insertPage round-trips to pages table") { dbPath =>
-    val xa  = Db.transactor(dbPath.toString)
     val uri = "gs://vie-doc/thanh-nghi/images/105/000.png"
-    for
-      _ <- Schema.createTables.transact(xa)
-      _ <- Indexer.insertPage(uri, "Hội nghị Yalta", "hoi nghi yalta").transact(xa)
-      rows <- sql"SELECT image_uri, text_norm FROM pages"
-                .query[(String, String)]
-                .to[List]
-                .transact(xa)
-    yield
-      assertEquals(rows.length, 1)
-      assertEquals(rows.head._1, uri)
-      assertEquals(rows.head._2, "hoi nghi yalta")
+    Db.transactor(dbPath.toString).use { xa =>
+      for
+        _ <- Schema.createTables.transact(xa)
+        _ <- Indexer.insertPage(uri, "Hội nghị Yalta", "hoi nghi yalta").transact(xa)
+        rows <- sql"SELECT image_uri, text_norm FROM pages"
+                  .query[(String, String)]
+                  .to[List]
+                  .transact(xa)
+      yield
+        assertEquals(rows.length, 1)
+        assertEquals(rows.head._1, uri)
+        assertEquals(rows.head._2, "hoi nghi yalta")
+    }
   }
 
   tempDb.test("insertPage is idempotent") { dbPath =>
-    val xa  = Db.transactor(dbPath.toString)
     val uri = "gs://vie-doc/thanh-nghi/images/105/000.png"
-    for
-      _ <- Schema.createTables.transact(xa)
-      _ <- Indexer.insertPage(uri, "text", "text").transact(xa)
-      _ <- Indexer.insertPage(uri, "text", "text").transact(xa)
-      count <- sql"SELECT COUNT(*) FROM pages".query[Int].unique.transact(xa)
-    yield assertEquals(count, 1)
+    Db.transactor(dbPath.toString).use { xa =>
+      for
+        _ <- Schema.createTables.transact(xa)
+        _ <- Indexer.insertPage(uri, "text", "text").transact(xa)
+        _ <- Indexer.insertPage(uri, "text", "text").transact(xa)
+        count <- sql"SELECT COUNT(*) FROM pages".query[Int].unique.transact(xa)
+      yield assertEquals(count, 1)
+    }
   }

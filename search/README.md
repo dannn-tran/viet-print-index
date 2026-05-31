@@ -62,7 +62,8 @@ mill cli.run index gcs \
   --db ../data/index.db \
   --bucket vie-doc \
   --prefix thanh-nghi/ocr/ \
-  [--format single|batched]   # default: batched
+  [--format single|batched]          # default: batched
+  [--download-concurrency N]         # default: 1; increase for faster GCS downloads
 ```
 
 Progress is printed per blob:
@@ -151,7 +152,9 @@ import doobie.implicits.*
 import vpi.db.Db
 import vpi.search.Search
 
-val xa = Db.transactor("data/index.db")
-val results = Search.search("hội nghị").transact(xa).unsafeRunSync()
+Db.transactor("data/index.db").use { xa =>
+  Search.search("hội nghị").transact(xa)
+}.unsafeRunSync()
 // List[SearchResult(imageUri, snippet)]
+// snippet uses SQLite snippet() with match markers >>>term<<<
 ```

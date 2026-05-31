@@ -34,7 +34,7 @@ object Main extends CommandIOApp(
     (dbOpt, ocrDirOpt, formatOpt(SingleFormat)).mapN { (db, ocrDir, format) =>
       def onProgress(c: Int, t: Int, name: String, pages: Int): IO[Unit] =
         IO.println(f"[$c%5d/$t] $name")
-      Indexer.indexAll(db, LocalSource(ocrDir), format, onProgress) >>
+      Indexer.indexAll(db, LocalSource(ocrDir), format, onProgress = onProgress) >>
         IO.println("Done.").as(ExitCode.Success)
     }
   }
@@ -42,10 +42,13 @@ object Main extends CommandIOApp(
   private val indexGcsCmd = Opts.subcommand("gcs", "Index from GCS bucket (resumable)") {
     val bucketOpt = Opts.option[String]("bucket", help = "GCS bucket name", metavar = "bucket")
     val prefixOpt = Opts.option[String]("prefix", help = "Blob prefix", metavar = "prefix")
-    (dbOpt, bucketOpt, prefixOpt, formatOpt(BatchedFormat)).mapN { (db, bucket, prefix, format) =>
+    val concurrencyOpt =
+      Opts.option[Int]("download-concurrency", help = "Number of blobs to download concurrently", metavar = "N")
+        .orNone.map(_.getOrElse(1))
+    (dbOpt, bucketOpt, prefixOpt, formatOpt(BatchedFormat), concurrencyOpt).mapN { (db, bucket, prefix, format, concurrency) =>
       def onProgress(c: Int, t: Int, name: String, pages: Int): IO[Unit] =
         IO.println(f"[$c%5d/$t] $name ($pages pages)")
-      Indexer.indexAll(db, GcsSource(bucket, prefix), format, onProgress) >>
+      Indexer.indexAll(db, GcsSource(bucket, prefix), format, concurrency, onProgress) >>
         IO.println("Done.").as(ExitCode.Success)
     }
   }
@@ -56,8 +59,9 @@ object Main extends CommandIOApp(
 
   private val searchCmd = Opts.subcommand("search", "Interactively search the index") {
     dbOpt.map { db =>
-      val xa = Db.transactor(db)
-      IO.println("Enter query (Ctrl-D to exit)") >> repl(xa).as(ExitCode.Success)
+      Db.transactor(db).use { xa =>
+        IO.println("Enter query (Ctrl-D to exit)") >> repl(xa)
+      }.as(ExitCode.Success)
     }
   }
 

@@ -11,7 +11,7 @@ object Search:
     val q = Normalize.normalize(query)
     sql"""
       SELECT image_uri,
-             snippet(pages_fts, 1, '', '', '...', 20)
+             snippet(pages_fts, 1, '>>>', '<<<', '...', 64)
       FROM pages_fts
       WHERE pages_fts MATCH $q
       ORDER BY rank

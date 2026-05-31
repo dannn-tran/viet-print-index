@@ -33,6 +33,7 @@ object ingest extends VpiModule {
     mvn"io.circe::circe-core:0.14.10",
     mvn"io.circe::circe-parser:0.14.10",
     mvn"com.google.cloud:google-cloud-storage:2.44.0",
+    mvn"org.slf4j:slf4j-nop:2.0.16",
   )}
   object test extends Tests
 }

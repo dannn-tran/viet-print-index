@@ -35,7 +35,7 @@ class GcsSource(bucket: String, prefix: String) extends OcrSource[Blob]:
   private val storage: Storage = StorageOptions.getDefaultInstance.getService
 
   def list: IO[List[Blob]] =
-    IO.blocking(
+    IO.interruptible(
       storage.list(bucket, Storage.BlobListOption.prefix(prefix))
         .iterateAll.asScala
         .filter(_.getName.endsWith(".json"))
@@ -48,7 +48,7 @@ class GcsSource(bucket: String, prefix: String) extends OcrSource[Blob]:
     }
 
   def read(item: Blob): IO[String] =
-    IO.blocking(new String(item.getContent(), "UTF-8"))
+    IO.interruptible(new String(item.getContent(), "UTF-8"))
 
   def itemName(item: Blob): String = item.getName
 
