@@ -15,14 +15,14 @@ class IndexerSpec extends munit.CatsEffectSuite:
     )
   )
 
-  tempDb.test("parseGcv extracts image URI and text") { _ =>
+  tempDb.test("SingleFormat.parse extracts image URI and text") { _ =>
     val json = scala.io.Source.fromResource("sample-gcv.json").mkString
     IO {
-      Indexer.parseGcv(json) match
-        case Some((uri, text)) =>
+      SingleFormat.parse(json) match
+        case (uri, text) :: Nil =>
           assert(uri.contains("105/000.png"))
           assert(text.contains("Hội nghị Yalta"))
-        case None => fail("parseGcv returned None")
+        case other => fail(s"Expected exactly one result, got: $other")
     }
   }
 

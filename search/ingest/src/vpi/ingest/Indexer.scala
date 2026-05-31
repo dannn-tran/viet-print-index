@@ -5,9 +5,6 @@ import cats.syntax.all.*
 import doobie.*
 import doobie.implicits.*
 import fs2.Stream
-import io.circe.parser.decode
-import java.nio.file.{Files, Path, Paths}
-import scala.jdk.CollectionConverters.*
 import vpi.db.{Db, Normalize, Schema}
 
 object Indexer:
@@ -18,41 +15,30 @@ object Indexer:
       _ <- sql"""INSERT OR IGNORE INTO pages_fts(image_uri, text_norm) VALUES($imageUri, $textNorm)""".update.run
     yield ()
 
-  def parseGcv(content: String): Option[(String, String)] =
-    decode[GcvResponse](content).toOption.flatMap(extractPage)
-
-  def indexAll(
+  def indexAll[Item](
     dbPath: String,
-    ocrBaseDir: String,
-    onProgress: (Int, Int, String) => IO[Unit] = (_, _, _) => IO.unit,
+    source: OcrSource[Item],
+    format: OcrFormat,
+    onProgress: (Int, Int, String, Int) => IO[Unit] = (_, _, _, _) => IO.unit,
   ): IO[Unit] =
-    val xa       = Db.transactor(dbPath)
-    val basePath = Paths.get(ocrBaseDir)
+    val xa = Db.transactor(dbPath)
     Schema.createTables.transact(xa) >>
-      IO.blocking(listJsonFiles(basePath)).flatMap { files =>
-        val total = files.length
-        Stream.emits(files.zipWithIndex)
-          .covary[IO]
-          .evalMap { case (file, idx) =>
-            val filePath = basePath.relativize(file).toString
-            IO.blocking(Files.readAllBytes(file)).flatMap { bytes =>
-              val insert = parseGcv(new String(bytes, "UTF-8")) match
-                case Some((uri, text)) => Some(insertPage(uri, text, Normalize.normalize(text)))
-                case None              => None
-              onProgress(idx + 1, total, filePath).as(insert)
-            }
-          }
-          .collect { case Some(op) => op }
-          .chunkN(500)
-          .evalMap(chunk => chunk.toList.sequence_.transact(xa))
-          .compile
-          .drain
+      source.list.flatMap { allItems =>
+        source.filterPending(allItems, xa).flatMap { items =>
+          val total   = items.length
+          val skipped = allItems.length - total
+          (if skipped > 0 then IO.println(s"$total items pending, $skipped already done") else IO.unit) >>
+            Stream.emits(items.zipWithIndex)
+              .covary[IO]
+              .evalMap { case (item, idx) =>
+                source.read(item).flatMap { content =>
+                  val pages = format.parse(content)
+                  val tx    = pages.traverse_ { case (uri, text) =>
+                                insertPage(uri, text, Normalize.normalize(text))
+                              } >> source.onCommit(item)
+                  tx.transact(xa) >> onProgress(idx + 1, total, source.itemName(item), pages.length)
+                }
+              }
+              .compile.drain
+        }
       }
-
-  private def listJsonFiles(base: Path): List[Path] =
-    Files.walk(base)
-      .filter(p => Files.isRegularFile(p) && p.toString.endsWith(".json"))
-      .iterator()
-      .asScala
-      .toList
-      .sorted
