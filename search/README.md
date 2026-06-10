@@ -9,7 +9,7 @@ Scala 3 library for indexing and searching Google Cloud Vision OCR data from the
 | `db` | Shared schema, transactor, Vietnamese text normalisation |
 | `ingest` | Parse GCV JSON → insert into SQLite (`OcrSource` × `OcrFormat`) |
 | `search` | FTS5 keyword search → image URIs + snippets |
-| `cli` | Command-line tool: `index local`, `index gcs`, `search` subcommands |
+| `cli` | Command-line tool: `index`, `search`, `get`, `context`, `view` subcommands |
 
 ## Prerequisites
 
@@ -84,20 +84,23 @@ Re-run after interruption resumes automatically:
 ...
 ```
 
-### `search` — interactive keyword search
+### `search` — interactive REPL or one-shot query
 
 ```sh
+# Interactive REPL
 mill cli.run search --db ../data/index.db
+
+# One-shot with JSON output (for agents/scripts)
+mill cli.run search --db ../data/index.db --json "hội nghị"
+mill cli.run search --db ../data/index.db --pub thanh-nghi --limit 10 --json "hội nghị"
 ```
 
 ```
 Enter query (Ctrl-D to exit)
 > hội nghị
-gs://vie-doc/thanh-nghi/images/001/001.png  ...>>>hoi nghi<<<...
+  1  gs://vie-doc/thanh-nghi/images/001/003.png  ...>>>hoi nghi<<<...
 (12 results)
-
-> trien lam
-...
+> :1          ← type :N to fetch + open that image
 > /clear      ← clears the screen
 > ^D
 ```
@@ -105,6 +108,28 @@ gs://vie-doc/thanh-nghi/images/001/001.png  ...>>>hoi nghi<<<...
 - Queries accept original Vietnamese or diacritic-stripped form.
 - Trigram tokenizer matches substrings (`nghi` is a superset of `hoi nghi`).
 - FTS5 syntax works: `"exact phrase"`, `term1 OR term2`, `term NOT excluded`.
+
+### `get` — full page text
+
+```sh
+mill cli.run get --db ../data/index.db --uri gs://vie-doc/thanh-nghi/images/001/003.png [--json]
+```
+
+### `context` — surrounding pages
+
+```sh
+mill cli.run context --db ../data/index.db --uri gs://... --window 2 [--json]
+```
+
+Returns up to `2×window + 1` pages centred on the given URI, in page order.
+
+### `view` — open page image
+
+```sh
+mill cli.run view --uri gs://vie-doc/thanh-nghi/images/001/003.png
+```
+
+Fetches from GCS to `~/.vpi/cache/`, opens with system viewer.
 
 ### Run as a standalone fat jar
 
@@ -120,7 +145,7 @@ java -jar out/cli/assembly.dest/out.jar search      --db /path/to/index.db
 ## Schema
 
 ```sql
-pages     (image_uri TEXT PRIMARY KEY, text TEXT, text_norm TEXT)
+pages     (image_uri TEXT PRIMARY KEY, text TEXT, text_norm TEXT, publication_id TEXT)
 pages_fts — FTS5 virtual table over text_norm, trigram tokenizer
 gcs_blobs (blob_name TEXT PRIMARY KEY, indexed_at TEXT)  -- GCS resumption checkpoint
 ```
@@ -153,8 +178,16 @@ import vpi.db.Db
 import vpi.search.Search
 
 Db.transactor("data/index.db").use { xa =>
-  Search.search("hội nghị").transact(xa)
+  // keyword search (optional pub filter + pagination)
+  Search.search("hội nghị", pub = Some("thanh-nghi"), limit = 20).transact(xa)
+  // List[SearchResult(imageUri, snippet, publicationId)]
+
+  // full page text
+  Search.getPage("gs://vie-doc/thanh-nghi/images/001/003.png").transact(xa)
+  // Option[PageResult(imageUri, text, publicationId)]
+
+  // surrounding pages
+  Search.contextPages("gs://vie-doc/thanh-nghi/images/001/003.png", window = 2).transact(xa)
+  // List[PageResult] — up to 5 pages centred on the given URI
 }.unsafeRunSync()
-// List[SearchResult(imageUri, snippet)]
-// snippet uses SQLite snippet() with match markers >>>term<<<
 ```

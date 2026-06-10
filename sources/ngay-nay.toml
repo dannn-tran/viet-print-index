@@ -1,0 +1,25 @@
+[publication]
+id = "ngay-nay"
+name = "Tuan Bao Ngay Nay"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "ngay-nay/pdf"
+images_prefix = "ngay-nay/images"
+ocr_output_prefix = "ngay-nay/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Tuan%20Bao%20Ngay%20Nay.htm"
+
+[explode]
+# Run `vie-pipeline calibrate ngay-nay --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]
