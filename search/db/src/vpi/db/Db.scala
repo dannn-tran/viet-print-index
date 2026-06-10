@@ -2,6 +2,7 @@ package vpi.db
 
 import cats.effect.{IO, Resource}
 import doobie.*
+import doobie.implicits.*
 import java.sql.DriverManager
 
 object Db:
@@ -11,3 +12,4 @@ object Db:
         IO.blocking(c.close())
       )
       .map(conn => Transactor.fromConnection[IO](conn, logHandler = None))
+      .evalTap(xa => Schema.createTables.transact(xa))

@@ -5,7 +5,7 @@ import cats.syntax.all.*
 import doobie.*
 import doobie.implicits.*
 import fs2.Stream
-import vpi.db.{Db, Normalize, Schema}
+import vpi.db.{Db, Normalize}
 
 object Indexer:
 
@@ -24,8 +24,7 @@ object Indexer:
     onProgress: (Int, Int, String, Int) => IO[Unit] = (_, _, _, _) => IO.unit,
   ): IO[Unit] =
     Db.transactor(dbPath).use { xa =>
-      Schema.createTables.transact(xa) >>
-        source.list.flatMap { allItems =>
+      source.list.flatMap { allItems =>
           source.filterPending(allItems, xa).flatMap { items =>
             val total   = items.length
             val skipped = allItems.length - total
