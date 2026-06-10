@@ -1,0 +1,27 @@
+[publication]
+id = "thanh-nghi"
+name = "Thanh Nghi"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "thanh-nghi/pdf"
+images_prefix = "thanh-nghi/images"
+ocr_output_prefix = "thanh-nghi/ocr"
+
+[source]
+type = "url_sequence"
+base_url = "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi"
+pattern = "{:03d}.pdf"
+range = [1, 120]
+
+[explode]
+# Calibrated via `vie-pipeline calibrate thanh-nghi --pdf data/thanh-nghi/pdf/001.pdf`
+preserve_crop = true
+negate_png = false
+preserve_orientation = true
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]

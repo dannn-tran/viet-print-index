@@ -9,9 +9,10 @@ import vpi.db.{Db, Normalize, Schema}
 
 object Indexer:
 
-  def insertPage(imageUri: String, text: String, textNorm: String): ConnectionIO[Unit] =
+  def insertPage(imageUri: String, text: String, textNorm: String, publicationId: Option[String] = None): ConnectionIO[Unit] =
     for
-      _ <- sql"""INSERT OR IGNORE INTO pages(image_uri, text, text_norm) VALUES($imageUri, $text, $textNorm)""".update.run
+      _ <- sql"""INSERT OR IGNORE INTO pages(image_uri, text, text_norm, publication_id)
+                 VALUES($imageUri, $text, $textNorm, $publicationId)""".update.run
       _ <- sql"""INSERT OR IGNORE INTO pages_fts(image_uri, text_norm) VALUES($imageUri, $textNorm)""".update.run
     yield ()
 
@@ -41,7 +42,7 @@ object Indexer:
                   }
                   .evalMap { case (item, pages) =>
                     val tx = pages.traverse_ { case (uri, text, textNorm) =>
-                               insertPage(uri, text, textNorm)
+                               insertPage(uri, text, textNorm, source.publicationId)
                              } >> source.onCommit(item)
                     tx.transact(xa) >>
                       counter.updateAndGet(_ + 1).flatMap { n =>

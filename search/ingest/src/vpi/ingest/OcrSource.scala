@@ -13,6 +13,7 @@ trait OcrSource[Item]:
   def filterPending(items: List[Item], xa: Transactor[IO]): IO[List[Item]] = IO.pure(items)
   def read(item: Item): IO[String]
   def itemName(item: Item): String
+  def publicationId: Option[String] = None
   def onCommit(item: Item): ConnectionIO[Unit]
 
 class LocalSource(basePath: Path) extends OcrSource[Path]:
@@ -32,6 +33,7 @@ object LocalSource:
   def apply(basePath: String): LocalSource = new LocalSource(Paths.get(basePath))
 
 class GcsSource(bucket: String, prefix: String) extends OcrSource[Blob]:
+  override val publicationId: Option[String] = GcsSource.pubIdFromPrefix(prefix)
   private val storage: Storage = StorageOptions.getDefaultInstance.getService
 
   def list: IO[List[Blob]] =
@@ -58,3 +60,6 @@ class GcsSource(bucket: String, prefix: String) extends OcrSource[Blob]:
 
 object GcsSource:
   def apply(bucket: String, prefix: String): GcsSource = new GcsSource(bucket, prefix)
+  // Derive publication id from the first path segment of the prefix (e.g. "thanh-nghi/ocr" → "thanh-nghi")
+  private[ingest] def pubIdFromPrefix(prefix: String): Option[String] =
+    prefix.split("/").headOption.filter(_.nonEmpty)

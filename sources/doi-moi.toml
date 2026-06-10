@@ -1,0 +1,25 @@
+[publication]
+id = "doi-moi"
+name = "Doi Moi"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "doi-moi/pdf"
+images_prefix = "doi-moi/images"
+ocr_output_prefix = "doi-moi/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Tuan%20Bao%20Doi%20Moi.htm"
+
+[explode]
+# Run `vie-pipeline calibrate doi-moi --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]

@@ -1,5 +1,6 @@
 package vpi.db
 
+import cats.syntax.all.*
 import doobie.*
 import doobie.implicits.*
 
@@ -8,9 +9,10 @@ object Schema:
     for
       _ <- sql"""
         CREATE TABLE IF NOT EXISTS pages (
-          image_uri TEXT NOT NULL PRIMARY KEY,
-          text      TEXT NOT NULL,
-          text_norm TEXT NOT NULL
+          image_uri      TEXT NOT NULL PRIMARY KEY,
+          text           TEXT NOT NULL,
+          text_norm      TEXT NOT NULL,
+          publication_id TEXT
         )
       """.update.run
       _ <- sql"""
@@ -26,4 +28,15 @@ object Schema:
           indexed_at TEXT NOT NULL
         )
       """.update.run
+      _ <- _addColumnIfMissing("pages", "publication_id", "TEXT")
     yield ()
+
+  // SQLite has no ADD COLUMN IF NOT EXISTS; probe via PRAGMA instead
+  private def _addColumnIfMissing(table: String, col: String, colType: String): ConnectionIO[Unit] =
+    Fragment.const(s"PRAGMA table_info($table)")
+      .query[(Int, String, String, Int, Option[String], Int)]
+      .to[List]
+      .flatMap { cols =>
+        if cols.exists(_._2 == col) then ().pure[ConnectionIO]
+        else Fragment.const(s"ALTER TABLE $table ADD COLUMN $col $colType").update.run.void
+      }

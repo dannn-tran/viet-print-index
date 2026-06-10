@@ -1,0 +1,25 @@
+[publication]
+id = "van-hoa-nguet-san"
+name = "Van Hoa Nguet San"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "van-hoa-nguet-san/pdf"
+images_prefix = "van-hoa-nguet-san/images"
+ocr_output_prefix = "van-hoa-nguet-san/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Van%20Hoa%20Nguet%20San.htm"
+
+[explode]
+# Run `vie-pipeline calibrate van-hoa-nguet-san --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]

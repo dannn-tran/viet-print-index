@@ -1,0 +1,25 @@
+[publication]
+id = "nam-phong-tap-chi"
+name = "Nam Phong Tap Chi"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "nam-phong-tap-chi/pdf"
+images_prefix = "nam-phong-tap-chi/images"
+ocr_output_prefix = "nam-phong-tap-chi/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Nam%20Phong%20Tap%20Chi.htm"
+
+[explode]
+# Run `vie-pipeline calibrate nam-phong-tap-chi --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]

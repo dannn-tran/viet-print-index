@@ -1,0 +1,25 @@
+[publication]
+id = "bachkhoa"
+name = "Bach Khoa"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "bachkhoa/pdf"
+images_prefix = "bachkhoa/images"
+ocr_output_prefix = "bachkhoa/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/bachkhoa.htm"
+
+[explode]
+# Run `vie-pipeline calibrate bachkhoa --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]
