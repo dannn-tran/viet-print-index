@@ -34,6 +34,19 @@ class PageAsset:
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> "PageAsset":
+        return cls(
+            publication_id=str(raw["publication_id"]),
+            issue_id=str(raw["issue_id"]),
+            page_id=str(raw["page_id"]),
+            source_url=str(raw["source_url"]),
+            object_name=str(raw["object_name"]),
+            kind=str(raw.get("kind", "image")),  # type: ignore[arg-type]
+            width=int(raw["width"]) if raw.get("width") is not None else None,
+            height=int(raw["height"]) if raw.get("height") is not None else None,
+        )
+
 
 @dataclass(frozen=True)
 class StateEvent:

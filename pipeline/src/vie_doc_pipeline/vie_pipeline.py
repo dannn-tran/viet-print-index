@@ -7,8 +7,10 @@ from gc_vision_adapter.ocr.run import RunBatchOcrCommand, batch_ocr
 from vie_doc_pipeline.config.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.stages.calibrate import run_calibrate
+from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets
 from vie_doc_pipeline.stages.explode import run_explode
 from vie_doc_pipeline.stages.ingest import run_ingest
+from vie_doc_pipeline.state import JsonlStateStore, default_state_path
 from vie_doc_pipeline.veridian import VeridianClient
 
 configure_logging()
@@ -18,6 +20,7 @@ _PubArg = Annotated[str, typer.Argument(help="Publication ID (matches sources/<i
 _ConfigDir = Annotated[str, typer.Option(help="Directory containing source TOML configs")]
 _Limit = Annotated[Optional[int], typer.Option(help="Process only first N items")]
 _Workers = Annotated[int, typer.Option(help="Concurrent workers")]
+_StateDir = Annotated[Path, typer.Option(help="Directory for inspectable JSONL state ledgers")]
 
 
 @app.command()
@@ -73,16 +76,31 @@ def discover(
     pub_id: _PubArg,
     config_dir: _ConfigDir = "sources",
     limit: _Limit = None,
+    state_dir: _StateDir = Path(".pipeline-state"),
 ) -> None:
-    """List available issues for a Veridian source without downloading pages."""
+    """Discover source pages and record them in an inspectable JSONL ledger."""
     config = load_config(pub_id, config_dir)
-    if config.source.type != "veridian":
-        raise typer.BadParameter("discover currently supports source.type = 'veridian' only")
-    issues = VeridianClient(config.source).list_issues(limit=limit)
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    assets = discover_assets(config, state, limit=limit)
     print(f"Publication : {config.publication.name} ({pub_id})")
-    print(f"Issues      : {len(issues)}")
-    for issue in issues:
-        print(f"  {issue.published_on.isoformat()}  {issue.oid}")
+    print(f"Pages       : {len(assets)}")
+    print(f"State       : {state.path}")
+
+
+@app.command()
+def fetch(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    limit: _Limit = None,
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
+    """Fetch discovered source pages into GCS, resuming from the JSONL ledger."""
+    config = load_config(pub_id, config_dir)
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    fetched, skipped = fetch_assets(config, state, limit=limit)
+    print(f"Fetched     : {fetched}")
+    print(f"Already in GCS: {skipped}")
+    print(f"State       : {state.path}")
 
 
 @app.command()
