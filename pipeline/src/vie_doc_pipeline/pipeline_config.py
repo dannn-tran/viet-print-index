@@ -29,6 +29,10 @@ class SourceConfig:
     range: tuple[int, int] | None = None
     urls: list[str] = field(default_factory=list)
     path: str | None = None
+    title_id: str | None = None
+    from_date: str | None = None
+    to_date: str | None = None
+    delay_seconds: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,10 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
             range=tuple(src_range) if src_range else None,
             urls=src.get("urls", []),
             path=src.get("path"),
+            title_id=src.get("title_id"),
+            from_date=src.get("from_date"),
+            to_date=src.get("to_date"),
+            delay_seconds=float(src.get("delay_seconds", 1.0)),
         ),
         explode=ExplodeParams(
             negate_png=exp.get("negate_png", False),

@@ -64,6 +64,7 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 | `bachkhoa` | Bach Khoa |
 | `van-hoa-nguet-san` | Van Hoa Nguet San |
 | `nam-phong-tap-chi` | Nam Phong Tap Chi |
+| `nlv-cuu-quoc` | Cứu Quốc (National Library of Vietnam) |
 
 ### Adding a new publication
 
@@ -119,6 +120,30 @@ mill cli.run index gcs \
 ```sh
 vie-pipeline status <pub-id>
 ```
+
+### National Library of Vietnam / Veridian sources
+
+Some sources use the National Library of Vietnam's Veridian viewer rather
+than PDFs. These sources fetch full native page JPEGs directly into the images
+prefix, so they skip the `explode` step and can proceed directly to `run-ocr`.
+
+```sh
+# List available issues without downloading pages
+vie-pipeline discover nlv-cuu-quoc --limit 10
+
+# Download complete page images for a small proof-of-concept sample.
+# Veridian sources are sequential and honour delay_seconds in their TOML file.
+vie-pipeline ingest nlv-cuu-quoc --limit 10 --workers 1
+
+# Then run the ordinary OCR and indexing steps
+vie-pipeline run-ocr nlv-cuu-quoc
+```
+
+The source config must provide `type = "veridian"`, the NLV `title_id`, and
+an inclusive `from_date`/`to_date`. `discover` follows the title calendar and
+month listings; `ingest` reads each issue viewer's native page dimensions and
+requests each complete page as one JPEG. Review collection terms and retain a
+conservative request delay before widening a run.
 
 ```
 Publication : Thanh Nghi (thanh-nghi)

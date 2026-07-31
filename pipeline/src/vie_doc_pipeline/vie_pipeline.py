@@ -9,6 +9,7 @@ from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.stages.calibrate import run_calibrate
 from vie_doc_pipeline.stages.explode import run_explode
 from vie_doc_pipeline.stages.ingest import run_ingest
+from vie_doc_pipeline.veridian import VeridianClient
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index pipeline tools")
@@ -58,9 +59,30 @@ def ingest(
     limit: _Limit = None,
     workers: _Workers = 4,
 ) -> None:
-    """Gather PDFs from source (web/local) and upload to GCS."""
+    """Gather source material and upload it to GCS.
+
+    PDF sources are uploaded to the PDF prefix. Veridian sources upload their
+    full native page images directly to the images prefix.
+    """
     config = load_config(pub_id, config_dir)
     run_ingest(config, limit=limit, workers=workers)
+
+
+@app.command()
+def discover(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    limit: _Limit = None,
+) -> None:
+    """List available issues for a Veridian source without downloading pages."""
+    config = load_config(pub_id, config_dir)
+    if config.source.type != "veridian":
+        raise typer.BadParameter("discover currently supports source.type = 'veridian' only")
+    issues = VeridianClient(config.source).list_issues(limit=limit)
+    print(f"Publication : {config.publication.name} ({pub_id})")
+    print(f"Issues      : {len(issues)}")
+    for issue in issues:
+        print(f"  {issue.published_on.isoformat()}  {issue.oid}")
 
 
 @app.command()
@@ -72,6 +94,9 @@ def explode(
 ) -> None:
     """Explode PDF blobs in GCS into page images and upload back to GCS."""
     config = load_config(pub_id, config_dir)
+    if config.source.type == "veridian":
+        print("Veridian sources ingest full page images directly; explode is not needed.")
+        return
     run_explode(config, limit=limit, workers=workers)
 
 

@@ -6,11 +6,18 @@ from google.cloud import storage
 
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.source_adapter import fetch_bytes, make_adapter
+from vie_doc_pipeline.stages.ingest_veridian import run_veridian_ingest
 
 logger = logging.getLogger(__name__)
 
 
 def run_ingest(config: PipelineConfig, limit: int | None = None, workers: int = 4) -> None:
+    if config.source.type == "veridian":
+        if workers != 1:
+            logger.warning("Veridian ingest is sequential; ignoring workers=%s", workers)
+        run_veridian_ingest(config, limit=limit)
+        return
+
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
 
