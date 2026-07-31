@@ -29,12 +29,12 @@ def run_explode(config: PipelineConfig, limit: int | None = None, workers: int =
 
     def _explode_one(blob: storage.Blob) -> tuple[str, int]:
         stem = blob.name.rsplit("/", 1)[-1].removesuffix(".pdf")
-        pdf_bytes = blob.download_as_bytes()
+        pdf_bytes = blob.download_as_bytes(timeout=600)
         images = explode_pdf_bytes(pdf_bytes, config.explode)
         for filename, image_bytes in images:
             img_blob_name = f"{config.gcs.images_prefix}/{stem}/{filename}"
             ctype = "image/png" if filename.endswith(".png") else "image/jpeg"
-            bucket.blob(img_blob_name).upload_from_string(image_bytes, content_type=ctype)
+            bucket.blob(img_blob_name).upload_from_string(image_bytes, content_type=ctype, timeout=600)
         return stem, len(images)
 
     if workers < 2:

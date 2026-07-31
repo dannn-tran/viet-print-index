@@ -1,4 +1,5 @@
 import re
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Protocol
@@ -76,13 +77,24 @@ def make_adapter(config: SourceConfig) -> SourceAdapter:
 def fetch_bytes(url_or_path: str) -> bytes:
     """Fetch PDF bytes from a URL or local file path."""
     if url_or_path.startswith("http://") or url_or_path.startswith("https://"):
-        req = urllib.request.Request(url_or_path, headers={"User-Agent": "vie-pipeline/1.0"})
+        safe_url = _encode_url(url_or_path)
+        req = urllib.request.Request(safe_url, headers={"User-Agent": "vie-pipeline/1.0"})
         with urllib.request.urlopen(req) as resp:
             return resp.read()
     return Path(url_or_path).read_bytes()
 
 
+def _encode_url(url: str) -> str:
+    """Percent-encode non-ASCII characters in URL path/query while preserving existing %XX escapes."""
+    parts = urllib.parse.urlsplit(url)
+    encoded_path = urllib.parse.quote(parts.path, safe="/:@!$&'()*+,;=%-")
+    encoded_query = urllib.parse.quote(parts.query, safe="/:@!$&'()*+,;=%-?&=")
+    return urllib.parse.urlunsplit(parts._replace(path=encoded_path, query=encoded_query))
+
+
 def _fetch_text(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "vie-pipeline/1.0"})
     with urllib.request.urlopen(req) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+        raw = resp.read()
+        charset = resp.headers.get_content_charset() or "latin-1"
+        return raw.decode(charset, errors="replace")
