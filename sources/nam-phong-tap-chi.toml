@@ -10,8 +10,9 @@ images_prefix = "nam-phong-tap-chi/images"
 ocr_output_prefix = "nam-phong-tap-chi/ocr"
 
 [source]
-type = "web_page"
-page_url = "http://ndclnh-mytho-usa.org/Nam%20Phong%20Tap%20Chi.htm"
+type = "local_dir"
+path = "../data/nam-phong-tap-chi/pdf"
+# original: http://ndclnh-mytho-usa.org/Nam%20Phong%20Tap%20Chi.htm
 
 [explode]
 # Run `vie-pipeline calibrate nam-phong-tap-chi --pdf <file>` to determine best params

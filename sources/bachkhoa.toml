@@ -10,8 +10,9 @@ images_prefix = "bachkhoa/images"
 ocr_output_prefix = "bachkhoa/ocr"
 
 [source]
-type = "web_page"
-page_url = "http://ndclnh-mytho-usa.org/bachkhoa.htm"
+type = "local_dir"
+path = "../data/bachkhoa/pdf"
+# original: http://ndclnh-mytho-usa.org/bachkhoa.htm
 
 [explode]
 # Run `vie-pipeline calibrate bachkhoa --pdf <file>` to determine best params

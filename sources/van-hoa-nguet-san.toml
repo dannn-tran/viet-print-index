@@ -10,8 +10,9 @@ images_prefix = "van-hoa-nguet-san/images"
 ocr_output_prefix = "van-hoa-nguet-san/ocr"
 
 [source]
-type = "web_page"
-page_url = "http://ndclnh-mytho-usa.org/Van%20Hoa%20Nguet%20San.htm"
+type = "local_dir"
+path = "../data/van-hoa-nguet-san/pdf"
+# original: http://ndclnh-mytho-usa.org/Van%20Hoa%20Nguet%20San.htm
 
 [explode]
 # Run `vie-pipeline calibrate van-hoa-nguet-san --pdf <file>` to determine best params

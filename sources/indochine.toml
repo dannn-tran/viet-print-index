@@ -1,0 +1,24 @@
+[publication]
+id = "indochine"
+name = "Indochine Hebdomadaire Illustree"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "indochine/pdf"
+images_prefix = "indochine/images"
+ocr_output_prefix = "indochine/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Indochine%20Hebdomadaire%20Illustr%C3%A9e.htm"
+
+[explode]
+preserve_crop = false
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["fr"]

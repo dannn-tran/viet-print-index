@@ -10,8 +10,9 @@ images_prefix = "tbtvcn/images"
 ocr_output_prefix = "tbtvcn/ocr"
 
 [source]
-type = "web_page"
-page_url = "http://ndclnh-mytho-usa.org/Trung%20Bac%20Tan%20Van%20Chu%20Nhat.htm"
+type = "local_dir"
+path = "../data/tbtvcn/pdf"
+# original: http://ndclnh-mytho-usa.org/Trung%20Bac%20Tan%20Van%20Chu%20Nhat.htm
 
 [explode]
 # Run `vie-pipeline calibrate tbtvcn --pdf <file>` to determine best params

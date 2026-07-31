@@ -1,0 +1,25 @@
+[publication]
+id = "phong-hoa"
+name = "Tuan Bao Phong Hoa"
+
+[gcs]
+project = "vie-ocr"
+bucket = "vie-doc"
+pdf_prefix = "phong-hoa/pdf"
+images_prefix = "phong-hoa/images"
+ocr_output_prefix = "phong-hoa/ocr"
+
+[source]
+type = "web_page"
+page_url = "http://ndclnh-mytho-usa.org/Tuan%20Bao%20Phong%20Hoa.htm"
+
+[explode]
+# Run `vie-pipeline calibrate phong-hoa --pdf <file>` to determine best params
+preserve_crop = true
+negate_png = false
+preserve_orientation = false
+no_text = false
+dpi = 300
+
+[ocr]
+language_hints = ["vi"]

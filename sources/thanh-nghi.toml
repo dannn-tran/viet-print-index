@@ -7,7 +7,7 @@ project = "vie-ocr"
 bucket = "vie-doc"
 pdf_prefix = "thanh-nghi/pdf"
 images_prefix = "thanh-nghi/images"
-ocr_output_prefix = "thanh-nghi/ocr"
+ocr_output_prefix = "thanh-nghi/ocr-outputs"
 
 [source]
 type = "url_sequence"
