@@ -1,5 +1,6 @@
 import itertools
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -31,6 +32,13 @@ class RunBatchOcrCommand:
     batch_process_timeout_seconds: int = DEFAULT_OCR_BATCH_PROCESS_TIMEOUT_SECONDS
 
 
+@dataclass(frozen=True)
+class SubmittedOcrBatch:
+    job_id: str
+    input_uris: tuple[str, ...]
+    output_prefix: str
+
+
 def batch_ocr(project_id: str, cmd: RunBatchOcrCommand):
     storage_client = storage.Client(project=project_id)
     vision_client = vision.ImageAnnotatorClient(
@@ -45,13 +53,13 @@ def batch_ocr(project_id: str, cmd: RunBatchOcrCommand):
             blob.name.lower().endswith(cmd.input_file_exts)
     )
 
-    # Phase 1: submit all batches without blocking
+    image_uris = tuple(image_uris)
     output_uri = f"gs://{cmd.output_bucket}/{cmd.output_dir}".rstrip("/")
     ocr_ops: list[tuple[int, operation.Operation]] = [
         (i, _submit_ocr_batch(vision_client, i, chunk, output_uri, cmd.output_batchsize, cmd.language_hints))
         for i, chunk in enumerate(itertools.batched(image_uris, cmd.input_batchsize))
     ]
-    logger.info(f"All {len(ocr_ops)} batches submitted ({len(ocr_ops)} images total). Waiting...")
+    logger.info(f"All {len(ocr_ops)} batches submitted ({len(image_uris)} images total). Waiting...")
 
     # Phase 2: wait for all operations, collecting failures
     failed_batches = []
@@ -68,6 +76,38 @@ def batch_ocr(project_id: str, cmd: RunBatchOcrCommand):
         logger.warning(f"Done with errors. Failed batches: {failed_batches}")
     else:
         logger.info("All batches completed successfully.")
+
+
+def submit_ocr_batches(
+    project_id: str,
+    cmd: RunBatchOcrCommand,
+    image_uris: Sequence[str],
+) -> list[SubmittedOcrBatch]:
+    """Submit OCR operations without blocking for completion.
+
+    Callers persist the returned job IDs and output prefixes, then reconcile
+    completion later. A unique output directory prevents concurrent runs from
+    overwriting or confusing each other's results.
+    """
+    vision_client = vision.ImageAnnotatorClient(
+        client_options=ClientOptions(quota_project_id=project_id)
+    )
+    base_output_uri = f"gs://{cmd.output_bucket}/{cmd.output_dir}".rstrip("/")
+    submitted: list[SubmittedOcrBatch] = []
+    for batch_id, chunk in enumerate(itertools.batched(tuple(image_uris), cmd.input_batchsize)):
+        job_id = uuid.uuid4().hex
+        output_prefix = f"{base_output_uri}/jobs/{job_id}/batch_{batch_id}/"
+        operation = _submit_ocr_batch(
+            vision_client,
+            batch_id,
+            chunk,
+            output_prefix.removesuffix(f"/batch_{batch_id}/"),
+            cmd.output_batchsize,
+            cmd.language_hints,
+        )
+        logger.info("Submitted OCR job %s (%s images) → %s", job_id, len(chunk), output_prefix)
+        submitted.append(SubmittedOcrBatch(job_id, chunk, output_prefix))
+    return submitted
 
 def _submit_ocr_batch(
         vision_client: vision.ImageAnnotatorClient,

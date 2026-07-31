@@ -10,11 +10,14 @@ from vie_doc_pipeline.stages.calibrate import run_calibrate
 from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets
 from vie_doc_pipeline.stages.explode import run_explode
 from vie_doc_pipeline.stages.ingest import run_ingest
+from vie_doc_pipeline.stages.ocr import reconcile_ocr, submit_ocr
 from vie_doc_pipeline.state import JsonlStateStore, default_state_path
 from vie_doc_pipeline.veridian import VeridianClient
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index pipeline tools")
+ocr_app = typer.Typer(help="Submit and reconcile persistent OCR jobs")
+app.add_typer(ocr_app, name="ocr")
 
 _PubArg = Annotated[str, typer.Argument(help="Publication ID (matches sources/<id>.toml)")]
 _ConfigDir = Annotated[str, typer.Option(help="Directory containing source TOML configs")]
@@ -100,6 +103,36 @@ def fetch(
     fetched, skipped = fetch_assets(config, state, limit=limit)
     print(f"Fetched     : {fetched}")
     print(f"Already in GCS: {skipped}")
+    print(f"State       : {state.path}")
+
+
+@ocr_app.command("submit")
+def ocr_submit(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    limit: _Limit = None,
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
+    """Submit fetched assets to OCR and persist jobs without blocking."""
+    config = load_config(pub_id, config_dir)
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    submitted = submit_ocr(config, state, limit=limit)
+    print(f"Submitted   : {submitted} pages")
+    print(f"State       : {state.path}")
+
+
+@ocr_app.command("reconcile")
+def ocr_reconcile(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
+    """Reconcile submitted OCR jobs against their GCS output prefixes."""
+    config = load_config(pub_id, config_dir)
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    completed, pending = reconcile_ocr(config, state)
+    print(f"Completed   : {completed} pages")
+    print(f"Pending     : {pending} pages")
     print(f"State       : {state.path}")
 
 
