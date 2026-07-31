@@ -128,22 +128,26 @@ than PDFs. These sources fetch full native page JPEGs directly into the images
 prefix, so they skip the `explode` step and can proceed directly to `run-ocr`.
 
 ```sh
-# List available issues without downloading pages
+# Discover full-page assets into an inspectable state ledger
 vie-pipeline discover nlv-cuu-quoc --limit 10
 
-# Download complete page images for a small proof-of-concept sample.
-# Veridian sources are sequential and honour delay_seconds in their TOML file.
-vie-pipeline ingest nlv-cuu-quoc --limit 10 --workers 1
+# Fetch only discovered-but-unfetched pages. Existing GCS images are recorded
+# into the ledger rather than downloaded again.
+vie-pipeline fetch nlv-cuu-quoc --limit 10
 
-# Then run the ordinary OCR and indexing steps
-vie-pipeline run-ocr nlv-cuu-quoc
+# Submit quickly, then reconcile later. Neither command blocks on long OCR work.
+vie-pipeline ocr submit nlv-cuu-quoc
+vie-pipeline ocr reconcile nlv-cuu-quoc
+
+# Inspect the append-only JSONL ledger and its reconstructed current state.
+vie-pipeline state nlv-cuu-quoc
 ```
 
 The source config must provide `type = "veridian"`, the NLV `title_id`, and
 an inclusive `from_date`/`to_date`. `discover` follows the title calendar and
-month listings; `ingest` reads each issue viewer's native page dimensions and
-requests each complete page as one JPEG. Review collection terms and retain a
-conservative request delay before widening a run.
+month listings, records each source page in `.pipeline-state/<pub>.jsonl`, and
+`fetch` requests each complete page as one JPEG. Review collection terms and
+retain a conservative request delay before widening a run.
 
 ```
 Publication : Thanh Nghi (thanh-nghi)

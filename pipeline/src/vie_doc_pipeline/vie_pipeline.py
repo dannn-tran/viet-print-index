@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Annotated, Optional
+from collections import Counter
 
 import typer
 
@@ -56,6 +57,21 @@ def status(
     print(f"  PDFs      : {pdfs:>6}  ({config.gcs.pdf_prefix}/)")
     print(f"  Exploded  : {exploded:>6}  ({config.gcs.images_prefix}/)")
     print(f"  OCR blobs : {ocr_blobs:>6}  ({config.gcs.ocr_output_prefix}/)")
+
+
+@app.command("state")
+def state_status(
+    pub_id: _PubArg,
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
+    """Summarise the current state reconstructed from a JSONL ledger."""
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    current = state.current()
+    counts = Counter(str(record.get("event", "unknown")) for record in current.values())
+    print(f"State       : {state.path}")
+    print(f"Assets      : {len(current)}")
+    for event, count in sorted(counts.items()):
+        print(f"  {event:<14} {count:>6}")
 
 
 @app.command()
@@ -156,7 +172,7 @@ def run_ocr(
     pub_id: _PubArg,
     config_dir: _ConfigDir = "sources",
 ) -> None:
-    """Submit GCS images to Google Cloud Vision batch OCR."""
+    """Legacy blocking OCR command; prefer `vie-pipeline ocr submit` and `ocr reconcile`."""
     config = load_config(pub_id, config_dir)
     cmd = RunBatchOcrCommand(
         input_bucket=config.gcs.bucket,

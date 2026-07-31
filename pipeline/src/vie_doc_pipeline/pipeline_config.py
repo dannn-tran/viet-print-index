@@ -63,7 +63,7 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
     ocr = raw.get("ocr", {})
 
     src_range = src.get("range")
-    return PipelineConfig(
+    config = PipelineConfig(
         publication=PublicationConfig(
             id=pub["id"],
             name=pub["name"],
@@ -100,3 +100,20 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
             language_hints=tuple(ocr.get("language_hints", [])),
         ),
     )
+    _validate_config(config)
+    return config
+
+
+def _validate_config(config: PipelineConfig) -> None:
+    if config.source.type == "veridian":
+        missing = [
+            field for field, value in {
+                "source.title_id": config.source.title_id,
+                "source.from_date": config.source.from_date,
+                "source.to_date": config.source.to_date,
+            }.items() if not value
+        ]
+        if missing:
+            raise ValueError(f"Veridian source is missing required configuration: {', '.join(missing)}")
+        if config.source.delay_seconds < 0:
+            raise ValueError("source.delay_seconds must be non-negative")
