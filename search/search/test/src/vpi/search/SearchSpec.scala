@@ -71,3 +71,40 @@ class SearchSpec extends munit.CatsEffectSuite:
       }
     }
   }
+
+  tempDb.test("contextPages: returns windowed pages around target") { dbPath =>
+    val pages = List(
+      "ngay-nay/images/001/000.png" -> "page zero",
+      "ngay-nay/images/001/001.png" -> "page one",
+      "ngay-nay/images/001/002.png" -> "page two",
+      "ngay-nay/images/001/003.png" -> "page three",
+      "ngay-nay/images/001/004.png" -> "page four",
+    )
+    setup(dbPath.toString, pages*).use { xa =>
+      Search.contextPages("ngay-nay/images/001/002.png", 1).transact(xa).map { results =>
+        assertEquals(results.map(_.imageUri), List(
+          "ngay-nay/images/001/001.png",
+          "ngay-nay/images/001/002.png",
+          "ngay-nay/images/001/003.png",
+        ))
+      }
+    }
+  }
+
+  tempDb.test("contextPages: URL-encoded percent signs don't break LIKE pattern") { dbPath =>
+    val pages = List(
+      "ngay-nay/images/Ngay%20Nay%20091_91/000.png" -> "first",
+      "ngay-nay/images/Ngay%20Nay%20091_91/001.png" -> "second",
+      "ngay-nay/images/Ngay%20Nay%20091_91/002.png" -> "third",
+      "ngay-nay/images/other_issue/000.png"          -> "other",
+    )
+    setup(dbPath.toString, pages*).use { xa =>
+      Search.contextPages("ngay-nay/images/Ngay%20Nay%20091_91/001.png", 2).transact(xa).map { results =>
+        assertEquals(results.map(_.imageUri), List(
+          "ngay-nay/images/Ngay%20Nay%20091_91/000.png",
+          "ngay-nay/images/Ngay%20Nay%20091_91/001.png",
+          "ngay-nay/images/Ngay%20Nay%20091_91/002.png",
+        ))
+      }
+    }
+  }

@@ -65,58 +65,61 @@ object Main extends CommandIOApp(
   // ---- search --------------------------------------------------------------
 
   private val searchCmd = Opts.subcommand("search", "Search the index") {
-    val pubOpt    = Opts.option[String]("pub", help = "Filter by publication id", metavar = "id").orNone
-    val limitOpt  = Opts.option[Int]("limit", help = "Max results (default 20)", metavar = "N").orNone.map(_.getOrElse(20))
-    val offsetOpt = Opts.option[Int]("offset", help = "Result offset", metavar = "N").orNone.map(_.getOrElse(0))
-    val queryArg  = Opts.argument[String]("query").orNone
-    (dbOpt, pubOpt, limitOpt, offsetOpt, jsonOpt, queryArg).mapN { (db, pub, limit, offset, asJson, query) =>
+    val pubOpt        = Opts.option[String]("pub", help = "Filter by publication id", metavar = "id").orNone
+    val excludePubOpt = Opts.option[String]("exclude-pub", help = "Exclude publication id from results", metavar = "id").orNone
+    val limitOpt      = Opts.option[Int]("limit", help = "Max results (default 20)", metavar = "N").orNone.map(_.getOrElse(20))
+    val offsetOpt     = Opts.option[Int]("offset", help = "Result offset", metavar = "N").orNone.map(_.getOrElse(0))
+    val snippetLenOpt = Opts.option[Int]("snippet-len", help = "Snippet token length (default 64)", metavar = "N").orNone.map(_.getOrElse(64))
+    val queryArg      = Opts.argument[String]("query").orNone
+    (dbOpt, pubOpt, excludePubOpt, limitOpt, offsetOpt, snippetLenOpt, jsonOpt, queryArg).mapN {
+      (db, pub, excludePub, limit, offset, snippetLen, asJson, query) =>
       Db.transactor(db).use { xa =>
         query match
           case Some(q) =>
-            Search.search(q, pub, limit, offset).transact(xa).flatMap { results =>
+            Search.search(q, pub, excludePub, limit, offset, snippetLen).transact(xa).flatMap { results =>
               if asJson then IO.println(resultsToJson(results))
               else results.traverse_(r => IO.println(s"${r.imageUri}\t${r.snippet}")) >>
                    IO.println(s"(${results.size} results)")
             }.as(ExitCode.Success)
           case None =>
-            IO.println("Enter query (Ctrl-D to exit)") >> repl(xa, pub, limit).as(ExitCode.Success)
+            IO.println("Enter query (Ctrl-D to exit)") >> repl(xa, pub, excludePub, limit, snippetLen).as(ExitCode.Success)
       }
     }
   }
 
-  private def repl(xa: doobie.Transactor[IO], pub: Option[String], limit: Int): IO[Unit] =
+  private def repl(xa: doobie.Transactor[IO], pub: Option[String], excludePub: Option[String], limit: Int, snippetLen: Int): IO[Unit] =
     IO.print("> ") >> IO.readLine.flatMap {
       case null     => IO.println("")
-      case ""       => repl(xa, pub, limit)
-      case "/clear" => IO.print("[H[2J") >> repl(xa, pub, limit)
+      case ""       => repl(xa, pub, excludePub, limit, snippetLen)
+      case "/clear" => IO.print("[H[2J") >> repl(xa, pub, excludePub, limit, snippetLen)
       case input    =>
-        Search.search(input.trim, pub, limit).transact(xa).flatMap { results =>
+        Search.search(input.trim, pub, excludePub, limit, 0, snippetLen).transact(xa).flatMap { results =>
           val indexed = results.zipWithIndex
           indexed.traverse_ { case (r, i) => IO.println(s"  ${i + 1}  ${r.imageUri}\t${r.snippet}") } >>
           IO.println(s"(${results.size} results)") >>
-          replWithResults(xa, pub, limit, results)
+          replWithResults(xa, pub, excludePub, limit, snippetLen, results)
         }
     }
 
-  private def replWithResults(xa: doobie.Transactor[IO], pub: Option[String], limit: Int, last: List[SearchResult]): IO[Unit] =
+  private def replWithResults(xa: doobie.Transactor[IO], pub: Option[String], excludePub: Option[String], limit: Int, snippetLen: Int, last: List[SearchResult]): IO[Unit] =
     IO.print("> ") >> IO.readLine.flatMap {
       case null            => IO.println("")
-      case ""              => replWithResults(xa, pub, limit, last)
-      case s"/clear"       => IO.print("[H[2J") >> repl(xa, pub, limit)
+      case ""              => replWithResults(xa, pub, excludePub, limit, snippetLen, last)
+      case s"/clear"       => IO.print("[H[2J") >> repl(xa, pub, excludePub, limit, snippetLen)
       case s":${n}"        =>
         n.toIntOption.flatMap(i => last.lift(i - 1)) match
           case Some(r) =>
             val cacheDir = Paths.get(System.getProperty("user.home")).resolve(".vpi").resolve("cache")
             Browse.fetch(r.imageUri, cacheDir).flatMap(Browse.open) >>
-              replWithResults(xa, pub, limit, last)
+              replWithResults(xa, pub, excludePub, limit, snippetLen, last)
           case None =>
-            IO.println(s"No result $n") >> replWithResults(xa, pub, limit, last)
+            IO.println(s"No result $n") >> replWithResults(xa, pub, excludePub, limit, snippetLen, last)
       case input           =>
-        Search.search(input.trim, pub, limit).transact(xa).flatMap { results =>
+        Search.search(input.trim, pub, excludePub, limit, 0, snippetLen).transact(xa).flatMap { results =>
           val indexed = results.zipWithIndex
           indexed.traverse_ { case (r, i) => IO.println(s"  ${i + 1}  ${r.imageUri}\t${r.snippet}") } >>
           IO.println(s"(${results.size} results)") >>
-          replWithResults(xa, pub, limit, results)
+          replWithResults(xa, pub, excludePub, limit, snippetLen, results)
         }
     }
 
