@@ -585,6 +585,7 @@ dependencies = [
     { name = "gc-vision-adapter" },
     { name = "pymupdf" },
     { name = "typer" },
+    { name = "urllib3" },
     { name = "vie-doc-data" },
 ]
 
@@ -593,5 +594,6 @@ requires-dist = [
     { name = "gc-vision-adapter", editable = "packages/gc-vision-adapter" },
     { name = "pymupdf", specifier = ">=1.25" },
     { name = "typer" },
+    { name = "urllib3", specifier = ">=2.0" },
     { name = "vie-doc-data", editable = "packages/vie-doc-data" },
 ]

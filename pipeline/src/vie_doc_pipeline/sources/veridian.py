@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import re
 import urllib.parse
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 
@@ -50,13 +50,22 @@ def discover_pages(
     fetch_text: Callable[[str], str],
     limit: int | None = None,
 ) -> list[DiscoveredSourceItem]:
+    """Compatibility wrapper returning all discovered pages as a list."""
+    return list(iter_pages(config, fetch_text, limit))
+
+
+def iter_pages(
+    config: SourceConfig,
+    fetch_text: Callable[[str], str],
+    limit: int | None = None,
+) -> Iterator[DiscoveredSourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
     assert config.catalogue_url and config.image_server_url and config.title_id
     from_date = parse_date(config.from_date, "from_date") if config.from_date else None
     to_date = parse_date(config.to_date, "to_date") if config.to_date else None
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    result: list[DiscoveredSourceItem] = []
+    yielded = 0
     for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id):
         if not month_overlaps(year, month, from_date, to_date):
             continue
@@ -66,17 +75,17 @@ def discover_pages(
                 continue
             issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
             for page in parse_pages(issue_html, issue.oid):
-                result.append(DiscoveredSourceItem(
+                yield DiscoveredSourceItem(
                     kind="image",
                     source_url=page_image_url(config.image_server_url, page),
                     issue_id=issue.oid,
                     page_id=page.page_id,
                     width=page.width,
                     height=page.height,
-                ))
-                if limit is not None and len(result) >= limit:
-                    return result
-    return result
+                )
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    return
 
 
 def catalogue_url_for(catalogue_url: str, **query: str) -> str:

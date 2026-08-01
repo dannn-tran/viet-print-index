@@ -30,8 +30,24 @@ def ocr_output_available(asset_keys: Iterable[str], *, output_uris: list[str]) -
     return [_event("ocr_output_available", key, {"output_uris": output_uris}) for key in asset_keys]
 
 
-def failed(asset_key: str, *, stage: str, error: str) -> LedgerEvent:
-    return _event("failed", asset_key, {"stage": stage, "error": error})
+def failed(
+    asset_key: str,
+    *,
+    stage: str,
+    error: str,
+    retryable: bool = True,
+    attempts: int = 1,
+    retry_not_before: float | None = None,
+) -> LedgerEvent:
+    data: dict[str, object] = {
+        "stage": stage,
+        "error": error,
+        "retryable": retryable,
+        "attempts": attempts,
+    }
+    if retry_not_before is not None:
+        data["retry_not_before"] = retry_not_before
+    return _event("failed", asset_key, data)
 
 
 def source_inverted(source_id: str) -> LedgerEvent:

@@ -17,7 +17,14 @@ title_id = "WNyf"
 from_date = "1945-09-01"
 to_date = "1955-04-30"
 # Public source: keep a conservative request rate and use one worker.
-delay_seconds = 1.0
+
+[acquisition]
+max_workers = 2
+min_request_interval_seconds = 1.0
+max_attempts = 5
+backoff_factor = 1.0
+backoff_max_seconds = 30.0
+backoff_jitter_seconds = 0.5
 
 [explode]
 # Veridian ingestion fetches full-page JPEGs directly; explode is skipped.

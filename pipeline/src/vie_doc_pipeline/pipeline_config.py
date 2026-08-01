@@ -34,7 +34,16 @@ class SourceConfig:
     title_id: str | None = None
     from_date: str | None = None
     to_date: str | None = None
-    delay_seconds: float = 1.0
+
+
+@dataclass(frozen=True)
+class AcquisitionConfig:
+    max_workers: int = 4
+    min_request_interval_seconds: float = 0.0
+    max_attempts: int = 5
+    backoff_factor: float = 1.0
+    backoff_max_seconds: float = 30.0
+    backoff_jitter_seconds: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,7 @@ class PipelineConfig:
     source: SourceConfig
     explode: ExplodeParams
     ocr: OcrConfig
+    acquisition: AcquisitionConfig = AcquisitionConfig()
 
 
 def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
@@ -63,6 +73,7 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
     src = raw.get("source", {})
     exp = raw.get("explode", {})
     ocr = raw.get("ocr", {})
+    acquisition = raw.get("acquisition", {})
 
     src_range = src.get("range")
     config = PipelineConfig(
@@ -90,7 +101,6 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
             title_id=src.get("title_id"),
             from_date=src.get("from_date"),
             to_date=src.get("to_date"),
-            delay_seconds=float(src.get("delay_seconds", 1.0)),
         ),
         explode=ExplodeParams(
             negate_png=exp.get("negate_png", False),
@@ -102,6 +112,14 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
         ),
         ocr=OcrConfig(
             language_hints=tuple(ocr.get("language_hints", [])),
+        ),
+        acquisition=AcquisitionConfig(
+            max_workers=int(acquisition.get("max_workers", 4)),
+            min_request_interval_seconds=float(acquisition.get("min_request_interval_seconds", 0.0)),
+            max_attempts=int(acquisition.get("max_attempts", 5)),
+            backoff_factor=float(acquisition.get("backoff_factor", 1.0)),
+            backoff_max_seconds=float(acquisition.get("backoff_max_seconds", 30.0)),
+            backoff_jitter_seconds=float(acquisition.get("backoff_jitter_seconds", 0.5)),
         ),
     )
     _validate_config(config)
@@ -121,5 +139,9 @@ def _validate_config(config: PipelineConfig) -> None:
         ]
         if missing:
             raise ValueError(f"Veridian source is missing required configuration: {', '.join(missing)}")
-        if config.source.delay_seconds < 0:
-            raise ValueError("source.delay_seconds must be non-negative")
+    if config.acquisition.max_workers < 1:
+        raise ValueError("acquisition.max_workers must be at least one")
+    if config.acquisition.min_request_interval_seconds < 0:
+        raise ValueError("acquisition.min_request_interval_seconds must be non-negative")
+    if config.acquisition.max_attempts < 1:
+        raise ValueError("acquisition.max_attempts must be at least one")
