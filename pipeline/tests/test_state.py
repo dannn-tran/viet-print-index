@@ -3,13 +3,32 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_fetched
+from vie_doc_pipeline.ledger.events import (
+    failed,
+    image_inverted,
+    image_normalized,
+    ocr_job_submitted,
+    source_discovered,
+    source_fetched,
+    source_inverted,
+)
 from vie_doc_pipeline.ledger.projection import AppState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 
 
 class EventStoreProjectionTest(unittest.TestCase):
+    def test_replay_projects_inversion_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = EventStore.open(Path(temporary_directory) / "state.jsonl")
+            store.append(source_inverted("issue-001"))
+            store.append(image_inverted("pub/issue-001/001"))
+
+            state = AppState.replay(store)
+
+            self.assertEqual(state.inversion_overrides.source_ids, frozenset({"issue-001"}))
+            self.assertEqual(state.inversion_overrides.image_keys, frozenset({"pub/issue-001/001"}))
+
     def test_appends_inspectable_events_and_reconstructs_current_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"

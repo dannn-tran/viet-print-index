@@ -35,25 +35,47 @@ class CurrentAssetState:
 CurrentState = dict[str, CurrentAssetState]
 
 
+@dataclass(frozen=True)
+class InversionOverrides:
+    source_ids: frozenset[str]
+    image_keys: frozenset[str]
+
+
 @dataclass
 class AppState:
     """Current projection coupled to the event store that records it."""
 
     event_store: EventStore
     current: CurrentState
+    source_inversion_overrides: frozenset[str] = frozenset()
+
+    @property
+    def inversion_overrides(self) -> InversionOverrides:
+        """Return explicit inversion decisions projected from the event history."""
+        return InversionOverrides(
+            source_ids=self.source_inversion_overrides,
+            image_keys=frozenset(
+                key for key, state in self.current.items() if state.inverted_override
+            ),
+        )
 
     @classmethod
     def replay(cls, event_store: EventStore) -> "AppState":
         """Rebuild current state by applying persisted events in order."""
-        current: CurrentState = {}
+        state = cls(event_store, {})
         for event in event_store.iter_events():
-            current = apply_event(current, event)
-        return cls(event_store, current)
+            state._apply(event)
+        return state
 
     def record(self, event: EventRecord) -> None:
         """Append an event, then apply it to the live projection."""
         self.event_store.append(event)
+        self._apply(event)
+
+    def _apply(self, event: EventRecord) -> None:
         self.current = apply_event(self.current, event)
+        if event.event == "source_inverted":
+            self.source_inversion_overrides = self.source_inversion_overrides | {event.asset_key}
 
 
 def apply_event(states: CurrentState, event: EventRecord) -> CurrentState:

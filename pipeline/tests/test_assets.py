@@ -53,17 +53,18 @@ class AssetDiscoveryTest(unittest.TestCase):
             event_store = EventStore.open(state_path)
             event_store.append(source_discovered(asset))
             event_store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
+            state = AppState.replay(event_store)
             store = _FakeTargetStore()
 
             with patch("vie_doc_pipeline.workflow.normalize_images.open_target_store", return_value=nullcontext(store)), \
                  patch("vie_doc_pipeline.workflow.normalize_images.check_inversion") as check:
                 check.return_value = Mock(inverted=False, needs_review=False)
-                summary = normalize_images(config, event_store)
+                summary = normalize_images(config, state)
 
             self.assertEqual(summary.created, 0)
             self.assertEqual(summary.native_registered, 1)
             self.assertEqual(store.uploads, [])
-            self.assertEqual(AppState.replay(event_store).current[asset.key].event, "image_normalized")
+            self.assertEqual(state.current[asset.key].event, "image_normalized")
             self.assertFalse(store.closed)
 
     def test_native_image_path_prefers_human_issue_label(self) -> None:
@@ -91,13 +92,14 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.jsonl"
             store = EventStore.open(state_path)
+            state = AppState.replay(store)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider([source_item])),
             ):
-                self.assertEqual(len(discover_source_assets(config, store)), 1)
-                self.assertEqual(discover_source_assets(config, store), [])
+                self.assertEqual(len(discover_source_assets(config, state)), 1)
+                self.assertEqual(discover_source_assets(config, state), [])
 
     def test_discovery_applies_limit_after_source_dispatch(self) -> None:
         config = PipelineConfig(
@@ -114,11 +116,12 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.jsonl"
             store = EventStore.open(state_path)
+            state = AppState.replay(store)
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),
             ):
-                self.assertEqual(len(discover_source_assets(config, store, limit=1)), 1)
+                self.assertEqual(len(discover_source_assets(config, state, limit=1)), 1)
 
 
 class _FakeTargetStore:

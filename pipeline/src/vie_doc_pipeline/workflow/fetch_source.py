@@ -90,18 +90,18 @@ class FetchContext:
         logger.warning("Failed to fetch %s: %s", asset.key, error)
 
 
-def fetch_source_assets(config: PipelineConfig, event_store: EventStore, limit: int | None = None) -> FetchSummary:
+def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | None = None) -> FetchSummary:
     """Fetch discovered source assets into the configured target."""
-    with _source_fetch_lock(event_store):
+    with _source_fetch_lock(state.event_store):
         with open_target_store(config.target) as store:
-            current = AppState.replay(event_store).current
+            current = state.current
             assets = iter_fetch_candidates(current, limit)
             client = http_client(config.source_requests)
             try:
                 context = FetchContext(
                     store=store,
                     http=client,
-                    event_store=event_store,
+                    event_store=state.event_store,
                     retry_delay=config.source_requests.backoff_max_seconds,
                 )
                 outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)

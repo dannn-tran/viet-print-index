@@ -11,7 +11,7 @@ from vie_doc_pipeline.ledger.events import configuration_bound, image_inverted, 
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.config import load_config
+from vie_doc_pipeline.config import PipelineConfig, load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.fetch_source import fetch_source_assets
@@ -72,17 +72,23 @@ def _bind_configuration(event_store: EventStore, config_toml: str | None) -> Non
         )
 
 
+def _open_run(config_path: Path, state_path: Path | None) -> tuple[PipelineConfig, AppState, Path]:
+    """Load configuration and replay one command's event-backed application state."""
+    config = load_config(config_path)
+    resolved_state_path = _resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(resolved_state_path)
+    _bind_configuration(event_store, config.config_toml)
+    return config, AppState.replay(event_store), resolved_state_path
+
+
 @app.command()
 def status(
     config_path: _ConfigPath,
     state_path: _StatePath = None,
 ) -> None:
     """Summarise current workflow lifecycle and review states."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    current = AppState.replay(event_store).current
+    config, state, state_path = _open_run(config_path, state_path)
+    current = state.current
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
     print(f"Assets      : {len(current)}")
@@ -98,11 +104,8 @@ def source_discover(
     state_path: _StatePath = None,
 ) -> None:
     """Discover external source records into the event store."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    assets = discover_source_assets(config, event_store, limit=limit)
+    config, state, state_path = _open_run(config_path, state_path)
+    assets = discover_source_assets(config, state, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"State file  : {state_path}")
 
@@ -114,11 +117,8 @@ def source_fetch(
     state_path: _StatePath = None,
 ) -> None:
     """Fetch discovered original source assets into target storage."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    summary = fetch_source_assets(config, event_store, limit=limit)
+    config, state, state_path = _open_run(config_path, state_path)
+    summary = fetch_source_assets(config, state, limit=limit)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
@@ -135,11 +135,7 @@ def images_normalize(
     inverted: Annotated[bool, typer.Option(help="Invert this source or image before OCR and presentation")] = False,
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    state = AppState.replay(event_store)
+    config, state, state_path = _open_run(config_path, state_path)
     selection = normalization_selection(source_id, image_id)
     if inverted:
         match selection:
@@ -149,7 +145,7 @@ def images_normalize(
                 state.record(image_inverted(selection.image_key))
             case AllNormalizationCandidates():
                 raise typer.BadParameter("--inverted requires --source-id or --image-id")
-    summary = normalize_images(config, event_store, limit=limit, selection=selection)
+    summary = normalize_images(config, state, limit=limit, selection=selection)
     print(f"Images created: {summary.created}")
     print(f"Native images : {summary.native_registered} (registered without copying)")
     print(f"Failed        : {summary.failed}")
@@ -172,11 +168,8 @@ def images_review(
     state_path: _StatePath = None,
 ) -> None:
     """List normalized images that were retained unchanged for manual review."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    current = AppState.replay(event_store).current
+    config, state, state_path = _open_run(config_path, state_path)
+    current = state.current
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")
@@ -208,11 +201,8 @@ def ocr_submit_jobs(
     state_path: _StatePath = None,
 ) -> None:
     """Submit OCR jobs for normalized image assets without waiting."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    summary = submit_ocr_jobs(config, event_store, limit=limit)
+    config, state, state_path = _open_run(config_path, state_path)
+    summary = submit_ocr_jobs(config, state, limit=limit)
     print(f"Submitted   : {summary.submitted} images")
     print(f"State file  : {state_path}")
 
@@ -223,11 +213,8 @@ def ocr_check_status(
     state_path: _StatePath = None,
 ) -> None:
     """Report whether submitted OCR jobs have result files in GCS."""
-    config = load_config(config_path)
-    state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(state_path)
-    _bind_configuration(event_store, config.config_toml)
-    summary = check_ocr_status(config, event_store)
+    config, state, state_path = _open_run(config_path, state_path)
+    summary = check_ocr_status(config, state)
     print(f"Completed   : {summary.completed} images")
     print(f"Pending     : {summary.pending} images")
     print(f"State file  : {state_path}")

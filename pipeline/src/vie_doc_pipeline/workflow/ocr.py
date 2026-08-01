@@ -9,7 +9,6 @@ from google.cloud import storage
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
 from vie_doc_pipeline.ledger.projection import AppState, assets_at
-from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import GcsTarget, PipelineConfig
 
@@ -25,9 +24,8 @@ class OcrSubmissionSummary:
     submitted: int = 0
 
 
-def submit_ocr_jobs(config: PipelineConfig, event_store: EventStore, limit: int | None = None) -> OcrSubmissionSummary:
+def submit_ocr_jobs(config: PipelineConfig, state: AppState, limit: int | None = None) -> OcrSubmissionSummary:
     target = _require_gcs_target(config.target)
-    state = AppState.replay(event_store)
     assets = list(islice((
         item.asset
         for item in assets_at(state.current, "image_normalized")
@@ -50,10 +48,10 @@ def submit_ocr_jobs(config: PipelineConfig, event_store: EventStore, limit: int 
     return OcrSubmissionSummary(submitted=len(assets))
 
 
-def check_ocr_status(config: PipelineConfig, event_store: EventStore) -> OcrStatusSummary:
+def check_ocr_status(config: PipelineConfig, state: AppState) -> OcrStatusSummary:
     """Check for OCR results in GCS and return completed and pending image counts."""
     _require_gcs_target(config.target)
-    with open_ocr_status_session(config, event_store) as session:
+    with open_ocr_status_session(config, state) as session:
         return session.check()
 
 
@@ -85,11 +83,11 @@ class OcrStatusSession:
 
 
 @contextmanager
-def open_ocr_status_session(config: PipelineConfig, event_store: EventStore):
+def open_ocr_status_session(config: PipelineConfig, state: AppState):
     target = _require_gcs_target(config.target)
     client = storage.Client(project=target.project)
     try:
-        yield OcrStatusSession(AppState.replay(event_store), client)
+        yield OcrStatusSession(state, client)
     finally:
         client.close()
 

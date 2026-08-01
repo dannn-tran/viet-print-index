@@ -14,8 +14,7 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.projection import AppState, CurrentState, assets_at
-from vie_doc_pipeline.ledger.store import EventStore
+from vie_doc_pipeline.ledger.projection import AppState, CurrentState, InversionOverrides, assets_at
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
@@ -69,15 +68,14 @@ class NormalizationContext:
 
 def normalize_images(
     config: PipelineConfig,
-    event_store: EventStore,
+    state: AppState,
     limit: int | None = None,
     selection: NormalizationSelection = AllNormalizationCandidates(),
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
     with open_target_store(config.target) as store:
-        state = AppState.replay(event_store)
         current = state.current
-        overrides = load_inversion_overrides(state.event_store)
+        overrides = state.inversion_overrides
         assets = iter_normalization_candidates(current, selection, limit)
         context = NormalizationContext(config, state, store, overrides)
         results = (normalize_asset(context, asset) for asset in assets)
@@ -207,15 +205,6 @@ def _image_content_type(filename: str) -> str:
 
 def _source_id(asset: SourceAsset) -> str:
     return asset.document_id if isinstance(asset, PdfAsset) else asset.issue_id
-
-
-def load_inversion_overrides(event_store: EventStore) -> InversionOverrides:
-    """Read explicit review decisions once before normalising a batch."""
-    events = tuple(event_store.iter_events())
-    return InversionOverrides(
-        source_ids=frozenset(event.asset_key for event in events if event.event == "source_inverted"),
-        image_keys=frozenset(event.asset_key for event in events if event.event == "image_inverted"),
-    )
 
 
 def is_forced_inverted(asset: ImageAsset, overrides: InversionOverrides) -> bool:
