@@ -79,6 +79,13 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 
 All commands run from the repo root. Replace `<pub-id>` with a publication ID from the table above.
 
+### Choose the workflow by source type
+
+| Source type | Workflow | Notes |
+|-------------|----------|-------|
+| `web_page`, `url_sequence`, `url_list`, or `local_dir` | `ingest → explode → run-ocr → index` | PDF-based workflow. `run-ocr` is the legacy blocking command. |
+| `veridian` | `discover → fetch → ocr submit → ocr reconcile → index` | Native full-page-image workflow, recorded in an append-only JSONL ledger. `discover` and `fetch` currently support only this source type. |
+
 ### 1. Ingest PDFs → GCS
 
 Fetches PDFs from the configured source (web page, URL list, or local directory) and uploads them to GCS. Skips already-uploaded files.
@@ -125,7 +132,8 @@ vie-pipeline status <pub-id>
 
 Some sources use the National Library of Vietnam's Veridian viewer rather
 than PDFs. These sources fetch full native page JPEGs directly into the images
-prefix, so they skip the `explode` step and can proceed directly to `run-ocr`.
+prefix, so they skip the `ingest` and `explode` steps. Their OCR workflow is
+asynchronous and state-backed.
 
 ```sh
 # Discover full-page assets into an inspectable state ledger
@@ -154,7 +162,7 @@ Publication : Thanh Nghi (thanh-nghi)
 GCS bucket  : gs://vie-doc
   PDFs      :    120  (thanh-nghi/pdf/)
   Exploded  :    120  (thanh-nghi/images/)
-  OCR blobs :   1500  (thanh-nghi/ocr/)
+  OCR blobs :   1500  (thanh-nghi/ocr-outputs/)
 ```
 
 ### Calibrate extraction params
