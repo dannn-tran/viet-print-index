@@ -24,4 +24,4 @@ members = [
 ]
 
 [project.scripts]
-vie-pipeline = "vie_doc_pipeline.vie_pipeline:app"
+vie-pipeline = "vie_doc_pipeline.cli:app"
