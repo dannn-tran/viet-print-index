@@ -14,6 +14,12 @@ type = "url_sequence"
 base_url = "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi"
 pattern = "{:03d}.pdf"
 range = [1, 120]
+# Combined issues omitted by the numbered sequence.
+urls = [
+  "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi/029-031.pdf",
+  "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi/051-054.pdf",
+  "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi/100-104.pdf",
+]
 
 [explode]
 # Calibrated via `vie-pipeline calibrate thanh-nghi --pdf data/thanh-nghi/pdf/001.pdf`

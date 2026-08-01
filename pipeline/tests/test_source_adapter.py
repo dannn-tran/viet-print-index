@@ -1,6 +1,7 @@
 import unittest
 
-from vie_doc_pipeline.source_adapter import _encode_url
+from vie_doc_pipeline.pipeline_config import SourceConfig
+from vie_doc_pipeline.source_adapter import UrlSequenceAdapter, _encode_url
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -17,3 +18,18 @@ class SourceAdapterTest(unittest.TestCase):
             _encode_url("https://example.test/Ngay%20Nay.pdf?q=%C4%91ời"),
             "https://example.test/Ngay%20Nay.pdf?q=%C4%91%E1%BB%9Di",
         )
+
+    def test_sequence_source_includes_explicit_combined_issues(self) -> None:
+        adapter = UrlSequenceAdapter(SourceConfig(
+            type="url_sequence",
+            base_url="https://example.test/issues",
+            pattern="{:03d}.pdf",
+            range=(1, 2),
+            urls=["https://example.test/issues/001-002.pdf"],
+        ))
+
+        self.assertEqual(adapter.list_pdf_items(), [
+            "https://example.test/issues/001.pdf",
+            "https://example.test/issues/002.pdf",
+            "https://example.test/issues/001-002.pdf",
+        ])

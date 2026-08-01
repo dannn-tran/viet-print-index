@@ -40,7 +40,8 @@ class UrlSequenceAdapter:
         base = (self._config.base_url or "").rstrip("/")
         pattern = self._config.pattern or "{}.pdf"
         start, end = self._config.range or (1, 1)
-        return [f"{base}/{pattern.format(i)}" for i in range(start, end + 1)]
+        sequence = [f"{base}/{pattern.format(i)}" for i in range(start, end + 1)]
+        return list(dict.fromkeys([*sequence, *self._config.urls]))
 
 
 class UrlListAdapter:
