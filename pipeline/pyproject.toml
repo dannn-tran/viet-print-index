@@ -10,6 +10,11 @@ dependencies = [
     "urllib3>=2.0",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+]
+
 [tool.uv]
 package = true
 
@@ -23,6 +28,12 @@ members = [
     "packages/vie-doc-ingest-cli",
     "packages/vie-doc-data",
 ]
+
+[tool.ruff.lint]
+select = ["C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [project.scripts]
 vie-pipeline = "vie_doc_pipeline.cli:app"
