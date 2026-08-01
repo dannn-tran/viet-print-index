@@ -29,6 +29,8 @@ class SourceConfig:
     range: tuple[int, int] | None = None
     urls: list[str] = field(default_factory=list)
     path: str | None = None
+    catalogue_url: str | None = None
+    image_server_url: str | None = None
     title_id: str | None = None
     from_date: str | None = None
     to_date: str | None = None
@@ -83,6 +85,8 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
             range=tuple(src_range) if src_range else None,
             urls=src.get("urls", []),
             path=src.get("path"),
+            catalogue_url=src.get("catalogue_url"),
+            image_server_url=src.get("image_server_url"),
             title_id=src.get("title_id"),
             from_date=src.get("from_date"),
             to_date=src.get("to_date"),
@@ -109,6 +113,8 @@ def _validate_config(config: PipelineConfig) -> None:
         missing = [
             field for field, value in {
                 "source.title_id": config.source.title_id,
+                "source.catalogue_url": config.source.catalogue_url,
+                "source.image_server_url": config.source.image_server_url,
                 "source.from_date": config.source.from_date,
                 "source.to_date": config.source.to_date,
             }.items() if not value

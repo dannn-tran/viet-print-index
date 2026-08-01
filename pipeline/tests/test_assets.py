@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from vie_doc_pipeline.domain import PageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
 from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
-from vie_doc_pipeline.stages.assets import _document_from_item, discover_assets, materialize_pages
+from vie_doc_pipeline.stages.assets import _document_from_url, discover_assets, materialize_pages
 from vie_doc_pipeline.state import JsonlStateStore
 
 
@@ -20,7 +20,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             ocr=OcrConfig(),
         )
 
-        asset = _document_from_item(config, "https://example.test/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
+        asset = _document_from_url(config, "https://example.test/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
 
         self.assertEqual(asset.document_id, "Tuần báo 001")
         self.assertEqual(asset.object_name, "doi-moi/pdf/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
@@ -57,9 +57,8 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
         with TemporaryDirectory() as directory:
             state = JsonlStateStore(Path(directory) / "state.jsonl")
-            adapter = Mock()
-            adapter.list_pdf_items.return_value = ["https://example.test/001.pdf"]
-            with patch("vie_doc_pipeline.stages.assets.make_adapter", return_value=adapter):
+            source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
+            with patch("vie_doc_pipeline.stages.assets.discover_source_items", return_value=[source_item]):
                 self.assertEqual(len(discover_assets(config, state)), 1)
                 self.assertEqual(discover_assets(config, state), [])
 

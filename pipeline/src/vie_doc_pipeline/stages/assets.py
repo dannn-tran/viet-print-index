@@ -12,9 +12,10 @@ from google.cloud import storage
 from vie_doc_pipeline.domain import DocumentAsset, PageAsset
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.source_adapter import fetch_bytes, make_adapter
+from vie_doc_pipeline.sources import discover_source_items
+from vie_doc_pipeline.sources.http import fetch_bytes
+from vie_doc_pipeline.sources.models import SourceItem
 from vie_doc_pipeline.state import JsonlStateStore
-from vie_doc_pipeline.veridian import VeridianClient
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +24,8 @@ SourceAsset = DocumentAsset | PageAsset
 
 def discover_assets(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> list[SourceAsset]:
     """Discover source documents or native page images into the JSONL ledger."""
-    if config.source.type == "veridian":
-        assets = _discover_veridian_pages(config, limit)
-    else:
-        items = make_adapter(config.source).list_pdf_items()
-        if limit is not None:
-            items = items[:limit]
-        assets = [_document_from_item(config, item) for item in items]
+    items = discover_source_items(config.source, limit)
+    assets = [_asset_from_source_item(config, item) for item in items]
 
     current = state.current()
     new_assets = [asset for asset in assets if asset.key not in current]
@@ -112,24 +108,22 @@ def materialize_pages(config: PipelineConfig, state: JsonlStateStore, limit: int
     return pages, passthrough
 
 
-def _discover_veridian_pages(config: PipelineConfig, limit: int | None) -> list[PageAsset]:
-    client = VeridianClient(config.source)
-    assets: list[PageAsset] = []
-    for issue in client.list_issues(limit=limit):
-        for page in client.list_pages(issue):
-            assets.append(PageAsset(
-                publication_id=config.publication.id,
-                issue_id=issue.oid,
-                page_id=page.filename.removesuffix(".jpg"),
-                source_url=client.page_image_url(page),
-                object_name=f"{config.gcs.images_prefix}/{issue.oid}/{page.filename}",
-                width=page.width,
-                height=page.height,
-            ))
-    return assets
+def _asset_from_source_item(config: PipelineConfig, item: SourceItem) -> SourceAsset:
+    if item.kind == "image":
+        assert item.issue_id and item.page_id
+        return PageAsset(
+            publication_id=config.publication.id,
+            issue_id=item.issue_id,
+            page_id=item.page_id,
+            source_url=item.source_url,
+            object_name=f"{config.gcs.images_prefix}/{item.issue_id}/{item.page_id}.jpg",
+            width=item.width,
+            height=item.height,
+        )
+    return _document_from_url(config, item.source_url)
 
 
-def _document_from_item(config: PipelineConfig, item: str) -> DocumentAsset:
+def _document_from_url(config: PipelineConfig, item: str) -> DocumentAsset:
     filename = PurePosixPath(urllib.parse.urlsplit(item).path).name or PurePosixPath(item).name
     document_id = urllib.parse.unquote(filename).removesuffix(".pdf")
     return DocumentAsset(

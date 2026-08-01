@@ -166,8 +166,9 @@ vie-pipeline ocr reconcile nlv-cuu-quoc
 vie-pipeline state nlv-cuu-quoc
 ```
 
-The source config must provide `type = "veridian"`, the NLV `title_id`, and
-an inclusive `from_date`/`to_date`. `discover` follows the title calendar and
+The source config must provide `type = "veridian"`, `catalogue_url`,
+`image_server_url`, the NLV `title_id`, and an inclusive `from_date`/`to_date`.
+`discover` follows the title calendar and
 month listings, records each source page in `.pipeline-state/<pub>.jsonl`, and
 `fetch` requests each complete page as one JPEG. Review collection terms and
 retain a conservative request delay before widening a run.

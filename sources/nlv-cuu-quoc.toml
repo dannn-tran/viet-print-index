@@ -11,7 +11,8 @@ ocr_output_prefix = "nlv-cuu-quoc/ocr"
 
 [source]
 type = "veridian"
-base_url = "http://baochi.nlv.gov.vn/baochi/cgi-bin/baochi"
+catalogue_url = "http://baochi.nlv.gov.vn/baochi/cgi-bin/baochi"
+image_server_url = "http://baochi.nlv.gov.vn/baochi/cgi-bin/imageserver/imageserver.pl"
 title_id = "WNyf"
 from_date = "1945-09-01"
 to_date = "1955-04-30"

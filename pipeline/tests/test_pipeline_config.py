@@ -21,6 +21,8 @@ images_prefix = "images"
 ocr_output_prefix = "ocr"
 [source]
 type = "veridian"
+catalogue_url = "https://example.test/catalogue"
+image_server_url = "https://example.test/images"
 title_id = "WNyf"
 """, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "from_date"):

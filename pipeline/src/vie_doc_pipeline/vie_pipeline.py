@@ -13,7 +13,6 @@ from vie_doc_pipeline.stages.explode import run_explode
 from vie_doc_pipeline.stages.ingest import run_ingest
 from vie_doc_pipeline.stages.ocr import reconcile_ocr, submit_ocr
 from vie_doc_pipeline.state import JsonlStateStore, default_state_path
-from vie_doc_pipeline.veridian import VeridianClient
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index pipeline tools")
@@ -177,9 +176,6 @@ def explode(
 ) -> None:
     """Explode PDF blobs in GCS into page images and upload back to GCS."""
     config = load_config(pub_id, config_dir)
-    if config.source.type == "veridian":
-        print("Veridian sources ingest full page images directly; explode is not needed.")
-        return
     run_explode(config, limit=limit, workers=workers)
 
 
