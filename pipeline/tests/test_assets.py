@@ -79,7 +79,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
-            with patch("vie_doc_pipeline.workflow.discover_source.discover_source_items", return_value=[source_item]):
+            with patch("vie_doc_pipeline.workflow.discover_source.iter_source_items", return_value=[source_item]):
                 self.assertEqual(len(discover_source_assets(config, ledger_path)), 1)
                 self.assertEqual(discover_source_assets(config, ledger_path), [])
 

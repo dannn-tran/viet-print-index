@@ -11,6 +11,7 @@ import html
 import re
 import urllib.parse
 from collections.abc import Callable, Iterator
+from itertools import islice
 from dataclasses import dataclass
 from datetime import date
 
@@ -45,15 +46,6 @@ class Page:
         return self.page_id + ".jpg"
 
 
-def discover_pages(
-    config: SourceConfig,
-    fetch_text: Callable[[str], str],
-    limit: int | None = None,
-) -> list[DiscoveredSourceItem]:
-    """Compatibility wrapper returning all discovered pages as a list."""
-    return list(iter_pages(config, fetch_text, limit))
-
-
 def iter_pages(
     config: SourceConfig,
     fetch_text: Callable[[str], str],
@@ -65,28 +57,45 @@ def iter_pages(
     to_date = parse_date(config.to_date, "to_date") if config.to_date else None
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    yielded = 0
-    for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id):
-        if not month_overlaps(year, month, from_date, to_date):
-            continue
-        issues = sorted(issues_from_month_html(fetch_text(month_url), config.title_id), key=lambda item: item.published_on)
-        for issue in issues:
-            if not in_range(issue.published_on, from_date, to_date):
-                continue
-            issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
-            for page in parse_pages(issue_html, issue.oid):
-                yield DiscoveredSourceItem(
-                    kind="image",
-                    source_url=page_image_url(config.image_server_url, page),
-                    issue_id=issue.oid,
-                    issue_label=f"{issue.published_on.isoformat()}_{issue.oid}",
-                    page_id=page.page_id,
-                    width=page.width,
-                    height=page.height,
-                )
-                yielded += 1
-                if limit is not None and yielded >= limit:
-                    return
+    issues = iter_catalogue_issues(config, fetch_text, catalogue_url, from_date, to_date, title_html)
+    pages = (item for issue in issues for item in iter_issue_pages(config, fetch_text, catalogue_url, issue))
+    yield from islice(pages, limit)
+
+
+def iter_catalogue_issues(
+    config: SourceConfig,
+    fetch_text: Callable[[str], str],
+    catalogue_url: str,
+    from_date: date | None,
+    to_date: date | None,
+    title_html: str,
+) -> Iterator[Issue]:
+    """Yield catalogue issues that fall within the configured date range."""
+    for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id or ""):
+        if month_overlaps(year, month, from_date, to_date):
+            issues = issues_from_month_html(fetch_text(month_url), config.title_id or "")
+            yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), sorted(issues, key=lambda issue: issue.published_on))
+
+
+def iter_issue_pages(
+    config: SourceConfig,
+    fetch_text: Callable[[str], str],
+    catalogue_url: str,
+    issue: Issue,
+) -> Iterator[DiscoveredSourceItem]:
+    """Yield the native full-page images for one Veridian issue."""
+    assert config.image_server_url
+    issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
+    for page in parse_pages(issue_html, issue.oid):
+        yield DiscoveredSourceItem(
+            kind="image",
+            source_url=page_image_url(config.image_server_url, page),
+            issue_id=issue.oid,
+            issue_label=f"{issue.published_on.isoformat()}_{issue.oid}",
+            page_id=page.page_id,
+            width=page.width,
+            height=page.height,
+        )
 
 
 def catalogue_url_for(catalogue_url: str, **query: str) -> str:

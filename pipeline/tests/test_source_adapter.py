@@ -2,7 +2,7 @@ import unittest
 
 from vie_doc_pipeline.pipeline_config import SourceConfig
 from vie_doc_pipeline.sources.http import encode_url
-from vie_doc_pipeline.sources.pdf import discover_pdf_items
+from vie_doc_pipeline.sources.pdf import iter_pdf_items
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -29,7 +29,7 @@ class SourceAdapterTest(unittest.TestCase):
             urls=["https://example.test/issues/001-002.pdf"],
         )
 
-        self.assertEqual([item.source_url for item in discover_pdf_items(config, lambda _: "")], [
+        self.assertEqual([item.source_url for item in iter_pdf_items(config, lambda _: "")], [
             "https://example.test/issues/001.pdf",
             "https://example.test/issues/002.pdf",
             "https://example.test/issues/001-002.pdf",

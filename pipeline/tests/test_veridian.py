@@ -2,7 +2,7 @@ from datetime import date
 import unittest
 
 from vie_doc_pipeline.pipeline_config import SourceConfig
-from vie_doc_pipeline.sources.veridian import discover_pages, issues_from_month_html, month_urls, page_image_url, parse_pages
+from vie_doc_pipeline.sources.veridian import iter_pages, issues_from_month_html, month_urls, page_image_url, parse_pages
 
 
 class VeridianParsingTest(unittest.TestCase):
@@ -53,7 +53,7 @@ class VeridianParsingTest(unittest.TestCase):
                 return '<a href="?a=d&amp;d=WNyf19510101">1</a><a href="?a=d&amp;d=WNyf19510102">2</a>'
             return "var documentOID = 'WNyf19510101'; var pageImageSizes = { '1.1':{'w':10,'h':20} };"
 
-        pages = discover_pages(config, fetch, limit=1)
+        pages = list(iter_pages(config, fetch, limit=1))
 
         self.assertEqual(len(pages), 1)
         self.assertEqual(pages[0].issue_label, "1951-01-01_WNyf19510101")
