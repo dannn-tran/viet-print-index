@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from vie_doc_pipeline.domain import PageAsset
+from vie_doc_pipeline.models import PageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
 from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
 from vie_doc_pipeline.stages.assets import _document_from_url, discover_assets, materialize_pages

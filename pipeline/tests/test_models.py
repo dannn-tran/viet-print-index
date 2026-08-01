@@ -1,6 +1,6 @@
 import unittest
 
-from vie_doc_pipeline.domain import DocumentAsset
+from vie_doc_pipeline.models import DocumentAsset
 
 
 class DocumentAssetTest(unittest.TestCase):

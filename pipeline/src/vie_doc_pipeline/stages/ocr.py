@@ -5,7 +5,7 @@ from __future__ import annotations
 from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
-from vie_doc_pipeline.domain import PageAsset
+from vie_doc_pipeline.models import PageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.state import JsonlStateStore
 

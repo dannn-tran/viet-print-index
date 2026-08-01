@@ -9,12 +9,11 @@ from pathlib import PurePosixPath
 
 from google.cloud import storage
 
-from vie_doc_pipeline.domain import DocumentAsset, PageAsset
+from vie_doc_pipeline.models import DocumentAsset, PageAsset, SourceItem
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources import discover_source_items
 from vie_doc_pipeline.sources.http import fetch_bytes
-from vie_doc_pipeline.sources.models import SourceItem
 from vie_doc_pipeline.state import JsonlStateStore
 
 logger = logging.getLogger(__name__)

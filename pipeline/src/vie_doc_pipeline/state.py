@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from vie_doc_pipeline.domain import DocumentAsset, PageAsset, StateEvent, utc_now
+from vie_doc_pipeline.models import DocumentAsset, PageAsset, StateEvent, utc_now
 
 
 class JsonlStateStore:

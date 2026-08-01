@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from vie_doc_pipeline.domain import PageAsset
+from vie_doc_pipeline.models import PageAsset
 from vie_doc_pipeline.state import JsonlStateStore
 
 

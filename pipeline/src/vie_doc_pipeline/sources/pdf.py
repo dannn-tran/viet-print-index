@@ -7,8 +7,8 @@ import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 
+from vie_doc_pipeline.models import SourceItem
 from vie_doc_pipeline.pipeline_config import SourceConfig
-from vie_doc_pipeline.sources.models import SourceItem
 
 
 def discover_pdf_items(config: SourceConfig, fetch_text: Callable[[str], str]) -> list[SourceItem]:

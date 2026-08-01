@@ -14,8 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
+from vie_doc_pipeline.models import SourceItem
 from vie_doc_pipeline.pipeline_config import SourceConfig
-from vie_doc_pipeline.sources.models import SourceItem
 
 _MONTH_LINK_RE = re.compile(r'href="([^"]*a=cl[^" ]*cl=CL2\.(\d{4})\.(\d{2})[^" ]*)"')
 _ISSUE_RE = re.compile(r"[?&]d=([A-Za-z0-9]+\d{8})")

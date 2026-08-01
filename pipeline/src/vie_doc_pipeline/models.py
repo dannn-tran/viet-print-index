@@ -1,4 +1,4 @@
-"""Stable records shared by discovery, fetch, OCR, and indexing stages."""
+"""Immutable records shared across source discovery and pipeline stages."""
 
 from __future__ import annotations
 
@@ -12,6 +12,18 @@ AssetKind = Literal["pdf", "image"]
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+@dataclass(frozen=True)
+class SourceItem:
+    """One source document or native image discovered by an adapter."""
+
+    kind: AssetKind
+    source_url: str
+    issue_id: str | None = None
+    page_id: str | None = None
+    width: int | None = None
+    height: int | None = None
 
 
 @dataclass(frozen=True)

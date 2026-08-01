@@ -7,8 +7,8 @@ effects; source modules only enumerate source documents or native page images.
 from __future__ import annotations
 
 from vie_doc_pipeline.pipeline_config import SourceConfig
+from vie_doc_pipeline.models import SourceItem
 from vie_doc_pipeline.sources.http import fetch_text, rate_limited
-from vie_doc_pipeline.sources.models import SourceItem
 from vie_doc_pipeline.sources.pdf import discover_pdf_items
 from vie_doc_pipeline.sources.veridian import discover_pages
 
