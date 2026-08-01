@@ -21,3 +21,8 @@ class NormalizationSummary:
 class OcrStatusSummary:
     completed: int = 0
     pending: int = 0
+
+
+@dataclass(frozen=True)
+class OcrSubmissionSummary:
+    submitted: int = 0

@@ -1,6 +1,7 @@
 """Submit and check asynchronous OCR jobs for image assets."""
 
 from pathlib import Path
+from itertools import islice
 
 from google.cloud import storage
 
@@ -10,19 +11,17 @@ from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.domain.results import OcrStatusSummary
+from vie_doc_pipeline.domain.results import OcrStatusSummary, OcrSubmissionSummary
 
 
-def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> int:
-    assets = [
+def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> OcrSubmissionSummary:
+    assets = list(islice((
         state.asset
         for state in assets_at(load_current(ledger_path), "image_normalized")
         if isinstance(state.asset, ImageAsset)
-    ]
-    if limit is not None:
-        assets = assets[:limit]
+    ), limit))
     if not assets:
-        return 0
+        return OcrSubmissionSummary()
 
     command = RunBatchOcrCommand(
         input_bucket=config.gcs.bucket,
@@ -35,7 +34,7 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
     for job in jobs:
         for event in ocr_job_submitted([uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix):
             append_event(ledger_path, event)
-    return len(assets)
+    return OcrSubmissionSummary(submitted=len(assets))
 
 
 def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSummary:

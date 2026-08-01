@@ -157,8 +157,8 @@ def ocr_submit_jobs(
     """Submit OCR jobs for normalized image assets without waiting."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    submitted = submit_ocr_jobs(config, ledger_path, limit=limit)
-    print(f"Submitted   : {submitted} images")
+    summary = submit_ocr_jobs(config, ledger_path, limit=limit)
+    print(f"Submitted   : {summary.submitted} images")
     print(f"Ledger      : {ledger_path}")
 
 
