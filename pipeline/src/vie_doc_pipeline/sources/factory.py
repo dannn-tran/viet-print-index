@@ -113,23 +113,18 @@ class WebPageSourceItemProvider(SourceItemProvider):
 @contextmanager
 def open_source_items(config: PipelineConfig) -> Iterator[SourceItemProvider]:
     """Open exactly the resources required to enumerate one configured source."""
-    provider = source_item_provider(config)
+    match config.source:
+        case VeridianSource() as source:
+            provider = VeridianSourceItemProvider.open(source, config)
+        case WebPagePdfSource() as source:
+            provider = WebPageSourceItemProvider.open(source, config)
+        case UrlSequencePdfSource() as source:
+            provider = UrlSequenceSourceItemProvider.from_source(source)
+        case UrlListPdfSource() as source:
+            provider = UrlListSourceItemProvider.from_source(source)
+        case LocalPdfSource() as source:
+            provider = LocalDirectorySourceItemProvider.from_source(source)
     try:
         yield provider
     finally:
         provider.close()
-
-
-def source_item_provider(config: PipelineConfig) -> SourceItemProvider:
-    """Construct the provider selected by the one typed source-variant match."""
-    match config.source:
-        case VeridianSource() as source:
-            return VeridianSourceItemProvider.open(source, config)
-        case WebPagePdfSource() as source:
-            return WebPageSourceItemProvider.open(source, config)
-        case UrlSequencePdfSource() as source:
-            return UrlSequenceSourceItemProvider.from_source(source)
-        case UrlListPdfSource() as source:
-            return UrlListSourceItemProvider.from_source(source)
-        case LocalPdfSource() as source:
-            return LocalDirectorySourceItemProvider.from_source(source)
