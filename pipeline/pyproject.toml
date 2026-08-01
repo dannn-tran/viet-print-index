@@ -24,8 +24,4 @@ members = [
 ]
 
 [project.scripts]
-run-ocr = "vie_doc_pipeline.run_ocr:app"
-download-ocr = "vie_doc_pipeline.download_ocr:app"
-read-ocr-fulltext-one = "vie_doc_pipeline.read_ocr_fulltext_one:app"
-extract-ocr-fulltext = "vie_doc_pipeline.extract_ocr_fulltext:app"
 vie-pipeline = "vie_doc_pipeline.vie_pipeline:app"

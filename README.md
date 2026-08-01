@@ -8,9 +8,8 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 
 ```
 [sources/]          [vie-pipeline CLI]               [GCS bucket]
-  *.toml  ──────►  ingest   ──────► PDFs      ─────► <pub>/pdf/
-  (per-pub          explode  ──────► images    ─────► <pub>/images/
-  config)           run-ocr  ──────► OCR JSON  ─────► <pub>/ocr/
+  *.toml  ──────►  staged source/OCR workflow ─────► <pub>/pdf/, images/, ocr/
+  (per-pub config)                                               │
                                                            │
                                             [vpi CLI]      │
                                             index gcs ◄────┘
@@ -96,34 +95,7 @@ vie-pipeline ocr reconcile <pub-id> # check asynchronous OCR outputs
 recorded directly as the OCR-ready page. PDF sources create page images under
 `<pub>/images/` at this step. Index OCR after reconciliation with `vpi index gcs`.
 
-`ingest`, `explode`, and `run-ocr` remain as legacy commands for existing
-collections; use the staged workflow for all new work.
-
-### 1. Ingest PDFs → GCS
-
-Fetches PDFs from the configured source (web page, URL list, or local directory) and uploads them to GCS. Skips already-uploaded files.
-
-```sh
-vie-pipeline ingest <pub-id> [--limit N]   # --limit for test runs
-```
-
-### 2. Explode PDFs → images → GCS
-
-Downloads each PDF from GCS, renders pages to images in memory, uploads images back to GCS. Skips already-exploded PDFs.
-
-```sh
-vie-pipeline explode <pub-id> [--limit N] [--workers 4]
-```
-
-### 3. Run OCR
-
-Submits GCS images to Google Cloud Vision batch OCR. Output JSON blobs land under `<pub>/ocr/` in GCS.
-
-```sh
-vie-pipeline run-ocr <pub-id>
-```
-
-### 4. Index OCR → SQLite
+### Index OCR → SQLite
 
 Streams OCR JSON blobs from GCS into a local SQLite FTS5 database. Resumable: interrupted runs pick up from the last committed blob.
 

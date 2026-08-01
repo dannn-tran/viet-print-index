@@ -4,13 +4,10 @@ from collections import Counter
 
 import typer
 
-from gc_vision_adapter.ocr.run import RunBatchOcrCommand, batch_ocr
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.stages.calibrate import run_calibrate
 from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets, materialize_pages
-from vie_doc_pipeline.stages.explode import run_explode
-from vie_doc_pipeline.stages.ingest import run_ingest
 from vie_doc_pipeline.stages.ocr import reconcile_ocr, submit_ocr
 from vie_doc_pipeline.state import JsonlStateStore, default_state_path
 
@@ -71,22 +68,6 @@ def state_status(
     print(f"Assets      : {len(current)}")
     for event, count in sorted(counts.items()):
         print(f"  {event:<14} {count:>6}")
-
-
-@app.command()
-def ingest(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-    limit: _Limit = None,
-    workers: _Workers = 4,
-) -> None:
-    """Gather source material and upload it to GCS.
-
-    PDF sources are uploaded to the PDF prefix. Veridian sources upload their
-    full native page images directly to the images prefix.
-    """
-    config = load_config(pub_id, config_dir)
-    run_ingest(config, limit=limit, workers=workers)
 
 
 @app.command()
@@ -165,35 +146,6 @@ def ocr_reconcile(
     print(f"Completed   : {completed} pages")
     print(f"Pending     : {pending} pages")
     print(f"State       : {state.path}")
-
-
-@app.command()
-def explode(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-    limit: _Limit = None,
-    workers: _Workers = 4,
-) -> None:
-    """Explode PDF blobs in GCS into page images and upload back to GCS."""
-    config = load_config(pub_id, config_dir)
-    run_explode(config, limit=limit, workers=workers)
-
-
-@app.command(name="run-ocr")
-def run_ocr(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-) -> None:
-    """Legacy blocking OCR command; prefer `vie-pipeline ocr submit` and `ocr reconcile`."""
-    config = load_config(pub_id, config_dir)
-    cmd = RunBatchOcrCommand(
-        input_bucket=config.gcs.bucket,
-        input_file_prefix=config.gcs.images_prefix + "/",
-        output_bucket=config.gcs.bucket,
-        output_dir=config.gcs.ocr_output_prefix,
-        language_hints=list(config.ocr.language_hints),
-    )
-    batch_ocr(config.gcs.project, cmd)
 
 
 @app.command()
