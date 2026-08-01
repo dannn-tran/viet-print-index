@@ -8,9 +8,8 @@ from unittest.mock import Mock, patch
 from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
-from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.config.models import (
-    ExplodeParams,
+from vie_doc_pipeline.assets import ImageAsset
+from vie_doc_pipeline.config import (
     GcsConfig,
     OcrConfig,
     PipelineConfig,
@@ -19,8 +18,8 @@ from vie_doc_pipeline.config.models import (
     VeridianSource,
     WebPagePdfSource,
 )
-from vie_doc_pipeline.domain.assets import asset_from_source_item
-from vie_doc_pipeline.workflow.discover_source import discover_source_assets
+from vie_doc_pipeline.images.pdf import ExplodeParams
+from vie_doc_pipeline.workflow.discover_source import asset_from_source_item, discover_source_assets
 from vie_doc_pipeline.workflow.normalize_images import normalize_images
 
 

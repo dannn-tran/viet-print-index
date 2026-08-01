@@ -1,6 +1,6 @@
 import unittest
 
-from vie_doc_pipeline.config.models import AcquisitionConfig
+from vie_doc_pipeline.config import AcquisitionConfig
 from vie_doc_pipeline.sources.http import RequestGate, retry_policy
 
 

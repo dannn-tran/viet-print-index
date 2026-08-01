@@ -3,10 +3,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from vie_doc_pipeline.config.models import ExplodeParams, GcsConfig, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
+from vie_doc_pipeline.config import GcsConfig, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
+from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, source_discovered
 from vie_doc_pipeline.ledger.jsonl import append_event
-from vie_doc_pipeline.models import ImageAsset
+from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.workflow.ocr import _parse_gs_uri
 from vie_doc_pipeline.workflow.ocr import check_ocr_status
 

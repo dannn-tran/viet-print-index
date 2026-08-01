@@ -1,14 +1,42 @@
 """Discover external source records and record source assets."""
 
-from pathlib import Path
 from itertools import islice
+from pathlib import Path
+from pathlib import PurePosixPath
+import urllib.parse
 
-from vie_doc_pipeline.config.models import PipelineConfig
+from vie_doc_pipeline.assets import PdfAsset, SourceAsset, ImageAsset
+from vie_doc_pipeline.config import PipelineConfig
+from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.ledger.jsonl import append_event
-from vie_doc_pipeline.domain.assets import SourceAsset, asset_from_source_item
+
+
+def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
+    """Convert one source-provider record into a durable asset identity."""
+    if item.kind == "image":
+        if not item.issue_id or not item.page_id:
+            raise ValueError(f"Image source item is missing issue/page identity: {item.source_url}")
+        return ImageAsset(
+            publication_id=config.publication.id,
+            issue_id=item.issue_id,
+            page_id=item.page_id,
+            source_url=item.source_url,
+            gcs_object=f"{config.gcs.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
+            width=item.width,
+            height=item.height,
+            issue_label=item.issue_label,
+        )
+    filename = PurePosixPath(urllib.parse.urlsplit(item.source_url).path).name or PurePosixPath(item.source_url).name
+    document_id = urllib.parse.unquote(filename).removesuffix(".pdf")
+    return PdfAsset(
+        publication_id=config.publication.id,
+        document_id=document_id,
+        source_url=item.source_url,
+        gcs_object=f"{config.gcs.pdf_prefix}/{filename}",
+    )
 
 
 def discover_source_assets(

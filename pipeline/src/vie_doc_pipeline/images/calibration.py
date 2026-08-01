@@ -1,13 +1,25 @@
 """Inspect PDF-to-image variants before normalizing a collection."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import fitz
 
-from vie_doc_pipeline.images.pdf import explode_pdf_bytes
-from vie_doc_pipeline.config.models import ExplodeParams
-from vie_doc_pipeline.config.models import PipelineConfig
-from vie_doc_pipeline.domain.results import CalibrationSummary, CalibrationVariantSummary
+from vie_doc_pipeline.images.pdf import ExplodeParams, explode_pdf_bytes
+from vie_doc_pipeline.config import PipelineConfig
+
+
+@dataclass(frozen=True)
+class CalibrationVariantSummary:
+    name: str
+    image_count: int
+    output_dir: str
+
+
+@dataclass(frozen=True)
+class CalibrationSummary:
+    variants: tuple[CalibrationVariantSummary, ...] = ()
+    hints: tuple[str, ...] = ()
 
 _VARIANTS: list[tuple[str, ExplodeParams]] = [
     ("raw", ExplodeParams()),

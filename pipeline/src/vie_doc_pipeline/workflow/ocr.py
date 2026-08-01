@@ -11,9 +11,19 @@ from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
-from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.config.models import PipelineConfig
-from vie_doc_pipeline.domain.results import OcrStatusSummary, OcrSubmissionSummary
+from vie_doc_pipeline.assets import ImageAsset
+from vie_doc_pipeline.config import PipelineConfig
+
+
+@dataclass(frozen=True)
+class OcrStatusSummary:
+    completed: int = 0
+    pending: int = 0
+
+
+@dataclass(frozen=True)
+class OcrSubmissionSummary:
+    submitted: int = 0
 
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> OcrSubmissionSummary:

@@ -3,7 +3,7 @@ from itertools import islice
 import unittest
 from unittest.mock import patch
 
-from vie_doc_pipeline.config.models import VeridianSource
+from vie_doc_pipeline.config import VeridianSource
 from vie_doc_pipeline.sources.veridian import Issue, iter_source_items_from_veridian, issues_from_catalogue_html, page_image_url, parse_pages
 
 

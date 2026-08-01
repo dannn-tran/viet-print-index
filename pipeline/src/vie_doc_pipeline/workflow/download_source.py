@@ -18,12 +18,18 @@ from vie_doc_pipeline.ledger.events import failed, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.locking import acquisition_lock
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
-from vie_doc_pipeline.config.models import PipelineConfig
+from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
-from vie_doc_pipeline.domain.assets import SourceAsset
-from vie_doc_pipeline.domain.results import DownloadSummary
+from vie_doc_pipeline.assets import SourceAsset
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DownloadSummary:
+    downloaded: int = 0
+    already_present: int = 0
+    failed: int = 0
 
 
 @dataclass(frozen=True)

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from vie_doc_pipeline.models import DiscoveredSourceItem
-from vie_doc_pipeline.config.models import (
+from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem, SourceItemProvider
+from vie_doc_pipeline.config import (
     LocalPdfSource,
     PipelineConfig,
     UrlListPdfSource,
@@ -24,18 +23,6 @@ from vie_doc_pipeline.sources.pdf import (
     iter_source_items_from_web_page,
 )
 from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian
-
-
-class SourceItemProvider(ABC):
-    """One source-specific enumeration session."""
-
-    @abstractmethod
-    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
-        """Yield this session's source items."""
-
-    @abstractmethod
-    def close(self) -> None:
-        """Release resources owned by this session."""
 
 
 @dataclass(frozen=True)

@@ -18,12 +18,18 @@ from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
-from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
-from vie_doc_pipeline.config.models import PipelineConfig
+from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
+from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
-from vie_doc_pipeline.domain.results import NormalizationSummary
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class NormalizationSummary:
+    created: int = 0
+    native_registered: int = 0
+    failed: int = 0
 
 
 @dataclass(frozen=True)

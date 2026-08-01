@@ -6,7 +6,7 @@ from pathlib import Path
 from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
-from vie_doc_pipeline.models import ImageAsset
+from vie_doc_pipeline.assets import ImageAsset
 
 
 class JsonlLedgerTest(unittest.TestCase):

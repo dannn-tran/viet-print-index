@@ -11,7 +11,7 @@ from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import load_current
-from vie_doc_pipeline.models import ImageAsset
+from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets

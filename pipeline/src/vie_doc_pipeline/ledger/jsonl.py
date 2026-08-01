@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from vie_doc_pipeline.ledger.events import LedgerEvent
 from vie_doc_pipeline.ledger.locking import ledger_write_lock
-from vie_doc_pipeline.ledger.models import LedgerEvent
 
 
 def append_event(path: Path, event: LedgerEvent) -> None:

@@ -1,5 +1,16 @@
+from dataclasses import dataclass
+
 import fitz
-from vie_doc_pipeline.config.models import ExplodeParams
+
+
+@dataclass(frozen=True)
+class ExplodeParams:
+    negate_png: bool = False
+    preserve_crop: bool = False
+    preserve_orientation: bool = False
+    no_annotations: bool = False
+    no_text: bool = False
+    dpi: int = 300
 
 
 def explode_pdf_bytes(pdf_bytes: bytes, params: ExplodeParams) -> list[tuple[str, bytes]]:

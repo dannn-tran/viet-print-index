@@ -1,30 +1,12 @@
-"""Immutable records shared across source discovery and pipeline stages."""
+"""Immutable asset records shared across workflow stages."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 from typing import Literal
 
 
 AssetKind = Literal["pdf", "image"]
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-@dataclass(frozen=True)
-class DiscoveredSourceItem:
-    """One source document or native image discovered by an adapter."""
-
-    kind: AssetKind
-    source_url: str
-    issue_id: str | None = None
-    issue_label: str | None = None
-    page_id: str | None = None
-    width: int | None = None
-    height: int | None = None
 
 
 @dataclass(frozen=True)
