@@ -8,9 +8,10 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
-from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
+from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
 from vie_doc_pipeline.ledger.paths import default_ledger_path
-from vie_doc_pipeline.ledger.projection import load_current
+from vie_doc_pipeline.ledger.projection import AppState, load_current
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
@@ -50,7 +51,7 @@ def status(
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
     ensure_ledger_config(ledger_path, config.config_sha256)
-    current = load_current(ledger_path, config.config_sha256)
+    current = load_current(ledger_path)
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
     print(f"Assets      : {len(current)}")
@@ -106,13 +107,14 @@ def images_normalize(
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
     ensure_ledger_config(ledger_path, config.config_sha256)
+    state = AppState.replay(EventStore.open(ledger_path))
     selection = normalization_selection(source_id, image_id)
     if inverted:
         match selection:
             case SourceNormalizationCandidates():
-                append_event(ledger_path, source_inverted(selection.source_id))
+                state.record(source_inverted(selection.source_id))
             case ImageNormalizationCandidates():
-                append_event(ledger_path, image_inverted(selection.image_key))
+                state.record(image_inverted(selection.image_key))
             case AllNormalizationCandidates():
                 raise typer.BadParameter("--inverted requires --source-id or --image-id")
     summary = normalize_images(config, ledger_path, limit=limit, selection=selection)
@@ -142,7 +144,7 @@ def images_review(
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
     ensure_ledger_config(ledger_path, config.config_sha256)
-    current = load_current(ledger_path, config.config_sha256)
+    current = load_current(ledger_path)
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")

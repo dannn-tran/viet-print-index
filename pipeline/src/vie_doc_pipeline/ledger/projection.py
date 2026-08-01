@@ -7,8 +7,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import time
 
-from vie_doc_pipeline.ledger.jsonl import read_events
 from vie_doc_pipeline.ledger.events import LedgerEvent
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import SourceAsset, source_asset_from_dict
 
 
@@ -35,6 +35,27 @@ class CurrentAssetState:
 
 
 CurrentState = dict[str, CurrentAssetState]
+
+
+@dataclass
+class AppState:
+    """Current projection coupled to the event store that records it."""
+
+    event_store: EventStore
+    current: CurrentState
+
+    @classmethod
+    def replay(cls, event_store: EventStore) -> "AppState":
+        """Rebuild current state by applying persisted events in order."""
+        current: CurrentState = {}
+        for event in event_store.read_events():
+            current = apply_event(current, event)
+        return cls(event_store, current)
+
+    def record(self, event: LedgerEvent) -> None:
+        """Append an event, then apply it to the live projection."""
+        self.event_store.append(event)
+        self.current = apply_event(self.current, event)
 
 
 def apply_event(states: CurrentState, event: LedgerEvent) -> CurrentState:
@@ -71,8 +92,9 @@ def project_current(events: Iterable[LedgerEvent]) -> CurrentState:
     return states
 
 
-def load_current(path: Path, expected_config_sha256: str | None = None) -> CurrentState:
-    return project_current(read_events(path, expected_config_sha256))
+def load_current(path: Path) -> CurrentState:
+    """Replay the event store at ``path`` into a current-state projection."""
+    return AppState.replay(EventStore.open(path)).current
 
 
 def assets_at(current: CurrentState, event: str) -> list[CurrentAssetState]:

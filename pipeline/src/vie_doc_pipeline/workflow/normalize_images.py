@@ -15,8 +15,9 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config, read_events
-from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
+from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.projection import AppState, CurrentState, assets_at
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
@@ -63,7 +64,7 @@ class NormalizationContext:
     """External capabilities and fixed inputs for one normalisation-stage run."""
 
     config: PipelineConfig
-    ledger_path: Path
+    state: AppState
     store: TargetStore
     overrides: InversionOverrides
 
@@ -77,10 +78,11 @@ def normalize_images(
     """Create image assets from PDFs or designate native images without copying."""
     ensure_ledger_config(ledger_path, config.config_sha256)
     with open_target_store(config.target) as store:
-        current = load_current(ledger_path, config.config_sha256)
-        overrides = load_inversion_overrides(ledger_path, config.config_sha256)
+        state = AppState.replay(EventStore.open(ledger_path))
+        current = state.current
+        overrides = load_inversion_overrides(state.event_store)
         assets = iter_normalization_candidates(current, selection, limit)
-        context = NormalizationContext(config, ledger_path, store, overrides)
+        context = NormalizationContext(config, state, store, overrides)
         results = (normalize_asset(context, asset) for asset in assets)
         return summarize_normalization(results)
 
@@ -103,7 +105,7 @@ def iter_normalization_candidates(
 
 def iter_reprocessable_assets(current: CurrentState) -> Iterator[tuple[str, SourceAsset]]:
     """Yield explicitly selected assets without repeatedly decoding ledger data."""
-    for key, state in current.items():
+    for key, state in tuple(current.items()):
         if state.asset is None or state.event not in {"source_downloaded", "image_normalized"}:
             continue
         yield key, state.asset
@@ -121,7 +123,7 @@ def normalize_asset(
             case PdfAsset():
                 return NormalizationSummary(created=normalize_pdf_asset(context, asset))
     except (google_exceptions.GoogleAPIError, OSError, ValueError, fitz.FitzError) as error:
-        append_event(context.ledger_path, failed(asset.key, stage="normalize", error=str(error)))
+        context.state.record(failed(asset.key, stage="normalize", error=str(error)))
         logger.warning("Failed to normalize %s: %s", asset.key, error)
     return NormalizationSummary(failed=1)
 
@@ -139,7 +141,7 @@ def normalize_native_image(
             invert_image(raw_bytes, asset.target_path),
             content_type=_image_content_type(image.target_path),
         )
-    append_event(context.ledger_path, image_normalized(image))
+    context.state.record(image_normalized(image))
     return 1
 
 
@@ -152,9 +154,9 @@ def normalize_pdf_asset(
     created = 0
     for image, image_bytes in iter_pdf_image_assets(context.config, asset, pdf_bytes, context.overrides):
         store_pdf_image(context.store, image, image_bytes)
-        append_event(context.ledger_path, image_normalized(image))
+        context.state.record(image_normalized(image))
         created += 1
-    append_event(context.ledger_path, image_normalized(asset))
+    context.state.record(image_normalized(asset))
     return created
 
 
@@ -210,9 +212,9 @@ def _source_id(asset: SourceAsset) -> str:
     return asset.document_id if isinstance(asset, PdfAsset) else asset.issue_id
 
 
-def load_inversion_overrides(ledger_path: Path, expected_config_sha256: str | None = None) -> InversionOverrides:
+def load_inversion_overrides(event_store: EventStore) -> InversionOverrides:
     """Read explicit review decisions once before normalising a batch."""
-    events = tuple(read_events(ledger_path, expected_config_sha256))
+    events = tuple(event_store.read_events())
     return InversionOverrides(
         source_ids=frozenset(event.asset_key for event in events if event.event == "source_inverted"),
         image_keys=frozenset(event.asset_key for event in events if event.event == "image_inverted"),

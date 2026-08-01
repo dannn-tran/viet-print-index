@@ -9,8 +9,9 @@ from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
-from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
-from vie_doc_pipeline.ledger.projection import assets_at, load_current
+from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.projection import AppState, assets_at
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import GcsTarget, PipelineConfig
 
@@ -29,10 +30,11 @@ class OcrSubmissionSummary:
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> OcrSubmissionSummary:
     target = _require_gcs_target(config.target)
     ensure_ledger_config(ledger_path, config.config_sha256)
+    state = AppState.replay(EventStore.open(ledger_path))
     assets = list(islice((
-        state.asset
-        for state in assets_at(load_current(ledger_path, config.config_sha256), "image_normalized")
-        if isinstance(state.asset, ImageAsset)
+        item.asset
+        for item in assets_at(state.current, "image_normalized")
+        if isinstance(item.asset, ImageAsset)
     ), limit))
     if not assets:
         return OcrSubmissionSummary()
@@ -47,7 +49,7 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
     jobs = submit_ocr_batches(target.project, command, list(uri_to_asset))
     for job in jobs:
         for event in ocr_job_submitted([uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix):
-            append_event(ledger_path, event)
+            state.record(event)
     return OcrSubmissionSummary(submitted=len(assets))
 
 
@@ -61,12 +63,11 @@ def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSumm
 
 @dataclass
 class OcrStatusSession:
-    ledger_path: Path
+    state: AppState
     client: storage.Client
-    config_sha256: str | None
 
     def check(self) -> OcrStatusSummary:
-        current = load_current(self.ledger_path, self.config_sha256)
+        current = self.state.current
         by_job: dict[tuple[str, str], list[str]] = {}
         for asset_key, state in current.items():
             if state.event == "ocr_job_submitted" and state.job_id and state.output_prefix:
@@ -76,7 +77,7 @@ class OcrStatusSession:
             output_uris = self.output_uris(output_prefix)
             if output_uris:
                 for event in ocr_output_available(asset_keys, output_uris=output_uris):
-                    append_event(self.ledger_path, event)
+                    self.state.record(event)
                 completed += len(asset_keys)
             else:
                 pending += len(asset_keys)
@@ -92,7 +93,7 @@ def open_ocr_status_session(config: PipelineConfig, ledger_path: Path):
     target = _require_gcs_target(config.target)
     client = storage.Client(project=target.project)
     try:
-        yield OcrStatusSession(ledger_path, client, config.config_sha256)
+        yield OcrStatusSession(AppState.replay(EventStore.open(ledger_path)), client)
     finally:
         client.close()
 

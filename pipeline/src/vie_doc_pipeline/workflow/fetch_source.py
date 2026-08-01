@@ -14,9 +14,10 @@ from pathlib import Path
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_fetched
-from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
+from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
 from vie_doc_pipeline.ledger.locking import source_fetch_lock
-from vie_doc_pipeline.ledger.projection import CurrentState, eligible_source_assets, load_current
+from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
@@ -56,7 +57,7 @@ class FetchContext:
 
     store: TargetStore
     http: HttpClient
-    ledger_path: Path
+    event_store: EventStore
     retry_delay: float
 
     def fetch(self, asset: SourceAsset) -> FetchOutcome:
@@ -64,11 +65,11 @@ class FetchContext:
         try:
             existing = self.store.inspect(asset.target_path)
             if existing is not None:
-                append_event(self.ledger_path, source_fetched(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
+                self.event_store.append(source_fetched(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
                 return AlreadyPresent(asset)
             data = self.http.fetch_bytes(asset.source_url)
             self.store.write_bytes(asset.target_path, data, content_type=_content_type(asset))
-            append_event(self.ledger_path, source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
+            self.event_store.append(source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             return Fetched(asset)
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
             self.record_failure(asset, error)
@@ -77,8 +78,7 @@ class FetchContext:
     def record_failure(self, asset: SourceAsset, error: Exception) -> None:
         """Persist retry metadata for one failed source fetch."""
         retryable, attempts = _failure_details(error)
-        append_event(
-            self.ledger_path,
+        self.event_store.append(
             failed(
                 asset.key,
                 stage="fetch",
@@ -96,14 +96,15 @@ def fetch_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | 
     with source_fetch_lock(ledger_path):
         ensure_ledger_config(ledger_path, config.config_sha256)
         with open_target_store(config.target) as store:
-            current = load_current(ledger_path, config.config_sha256)
+            event_store = EventStore.open(ledger_path)
+            current = AppState.replay(event_store).current
             assets = iter_fetch_candidates(current, limit)
             client = http_client(config.source_requests)
             try:
                 context = FetchContext(
                     store=store,
                     http=client,
-                    ledger_path=ledger_path,
+                    event_store=event_store,
                     retry_delay=config.source_requests.backoff_max_seconds,
                 )
                 outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
