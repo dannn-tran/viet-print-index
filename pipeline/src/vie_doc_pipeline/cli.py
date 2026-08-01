@@ -15,7 +15,7 @@ from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
-from vie_doc_pipeline.workflow.download_source import download_source_assets
+from vie_doc_pipeline.workflow.fetch_source import fetch_source_assets
 from vie_doc_pipeline.workflow.normalize_images import (
     AllNormalizationCandidates,
     ImageNormalizationCandidates,
@@ -27,7 +27,7 @@ from vie_doc_pipeline.workflow.ocr import check_ocr_status, submit_ocr_jobs
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index source-to-OCR pipeline")
-source_app = typer.Typer(help="Discover and download original source assets")
+source_app = typer.Typer(help="Discover and fetch original source assets")
 images_app = typer.Typer(help="Create durable image assets for presentation and OCR")
 ocr_app = typer.Typer(help="Submit and check asynchronous OCR jobs")
 app.add_typer(source_app, name="source")
@@ -75,18 +75,18 @@ def source_discover(
     print(f"Ledger      : {ledger_path}")
 
 
-@source_app.command("download")
-def source_download(
+@source_app.command("fetch")
+def source_fetch(
     pub_id: _PubArg,
     config_dir: _ConfigDir = "sources",
     limit: _Limit = None,
     state_dir: _StateDir = Path(".pipeline-state"),
 ) -> None:
-    """Download discovered original source assets into target storage."""
+    """Fetch discovered original source assets into target storage."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    summary = download_source_assets(config, ledger_path, limit=limit)
-    print(f"Downloaded  : {summary.downloaded}")
+    summary = fetch_source_assets(config, ledger_path, limit=limit)
+    print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
     print(f"Ledger      : {ledger_path}")

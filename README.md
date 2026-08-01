@@ -8,7 +8,7 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 
 ```
 [sources/]          [vie-pipeline]                   [target storage]
-  *.toml  ──────►  source discover/download  ─────► original assets
+  *.toml  ──────►  source discover/fetch     ─────► original assets
   (per-pub config) images normalize          ─────► image assets
                     OCR submit/check          ─────► OCR JSON
                                                            │
@@ -95,7 +95,7 @@ JSONL ledger at `.pipeline-state/v2/<pub>.jsonl`:
 
 ```sh
 vie-pipeline source discover <pub-id>  # enumerate original source records
-vie-pipeline source download <pub-id>  # download originals into target storage
+vie-pipeline source fetch <pub-id>     # fetch originals into target storage
 vie-pipeline images normalize <pub-id> # create presentation/OCR image assets
 vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
 vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
@@ -137,10 +137,10 @@ backoff_jitter_seconds = 0.5
 The interval applies to every initial request and retry across worker
 threads. Temporary network failures and HTTP `429`, `500`, `502`, `503`, and
 `504` retry with backoff and respect `Retry-After`; other HTTP 4xx responses
-are recorded as permanent failures. Each completed download is immediately
-written to the ledger. Re-running `source download` resumes eligible work,
+are recorded as permanent failures. Each completed fetch is immediately
+written to the ledger. Re-running `source fetch` resumes eligible work,
 skips target objects already present, and leaves permanent failures untouched.
-Only one source-download command may run for a publication at once.
+Only one source-fetch command may run for a publication at once.
 
 ### Target storage
 
@@ -205,8 +205,8 @@ normalization is registered in place, without a duplicate target object.
 # Discover full-page source assets into an inspectable v2 ledger
 vie-pipeline source discover nlv-cuu-quoc --limit 10
 
-# Download only discovered-but-undownloaded originals.
-vie-pipeline source download nlv-cuu-quoc --limit 10
+# Fetch only discovered-but-not-yet-fetched originals.
+vie-pipeline source fetch nlv-cuu-quoc --limit 10
 
 # Inspect and register native images for presentation and OCR.
 vie-pipeline images normalize nlv-cuu-quoc
@@ -224,7 +224,7 @@ The source config must provide `type = "veridian"`, `catalogue_url`,
 `source discover` requests Veridian's complete issue catalogue (`ai=1`), filters
 the direct issue links to the configured date range, records each source image in
 `.pipeline-state/v2/<pub>.jsonl`, and
-`source download` requests each complete page as one JPEG. Review collection terms and
+`source fetch` requests each complete page as one JPEG. Review collection terms and
 retain a conservative request delay before widening a run.
 
 ### Calibrate extraction params

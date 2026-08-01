@@ -1,4 +1,4 @@
-"""Download discovered original source assets into the configured target."""
+"""Fetch discovered original source assets into the configured target."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from pathlib import Path
 
 from google.api_core import exceptions as google_exceptions
 
-from vie_doc_pipeline.ledger.events import failed, source_downloaded
+from vie_doc_pipeline.ledger.events import failed, source_fetched
 from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
-from vie_doc_pipeline.ledger.locking import source_download_lock
+from vie_doc_pipeline.ledger.locking import source_fetch_lock
 from vie_doc_pipeline.ledger.projection import CurrentState, eligible_source_assets, load_current
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
@@ -26,125 +26,125 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class DownloadSummary:
-    downloaded: int = 0
+class FetchSummary:
+    fetched: int = 0
     already_present: int = 0
     failed: int = 0
 
 
 @dataclass(frozen=True)
-class Downloaded:
+class Fetched:
     asset: SourceAsset
 
 
 @dataclass(frozen=True)
-class AlreadyDownloaded:
+class AlreadyPresent:
     asset: SourceAsset
 
 
 @dataclass(frozen=True)
-class DownloadFailed:
+class FetchFailed:
     asset: SourceAsset
 
 
-DownloadOutcome = Downloaded | AlreadyDownloaded | DownloadFailed
+FetchOutcome = Fetched | AlreadyPresent | FetchFailed
 
 
 @dataclass(frozen=True)
-class DownloadContext:
-    """External capabilities and policy fixed for one download-stage run."""
+class FetchContext:
+    """External capabilities and policy fixed for one source-fetch run."""
 
     store: TargetStore
     http: HttpClient
     ledger_path: Path
     retry_delay: float
 
-    def download(self, asset: SourceAsset) -> DownloadOutcome:
+    def fetch(self, asset: SourceAsset) -> FetchOutcome:
         """Store one asset and persist its outcome in this stage session."""
         try:
             existing = self.store.inspect(asset.target_path)
             if existing is not None:
-                append_event(self.ledger_path, source_downloaded(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
-                return AlreadyDownloaded(asset)
+                append_event(self.ledger_path, source_fetched(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
+                return AlreadyPresent(asset)
             data = self.http.fetch_bytes(asset.source_url)
             self.store.write_bytes(asset.target_path, data, content_type=_content_type(asset))
-            append_event(self.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
-            return Downloaded(asset)
+            append_event(self.ledger_path, source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
+            return Fetched(asset)
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
             self.record_failure(asset, error)
-            return DownloadFailed(asset)
+            return FetchFailed(asset)
 
     def record_failure(self, asset: SourceAsset, error: Exception) -> None:
-        """Persist retry metadata for one failed source download."""
+        """Persist retry metadata for one failed source fetch."""
         retryable, attempts = _failure_details(error)
         append_event(
             self.ledger_path,
             failed(
                 asset.key,
-                stage="download",
+                stage="fetch",
                 error=str(error),
                 retryable=retryable,
                 attempts=attempts,
                 retry_not_before=time.time() + self.retry_delay if retryable else None,
             ),
         )
-        logger.warning("Failed to download %s: %s", asset.key, error)
+        logger.warning("Failed to fetch %s: %s", asset.key, error)
 
 
-def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
-    """Download discovered source assets, resuming from the ledger."""
-    with source_download_lock(ledger_path):
+def fetch_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> FetchSummary:
+    """Fetch discovered source assets into the configured target."""
+    with source_fetch_lock(ledger_path):
         ensure_ledger_config(ledger_path, config.config_sha256)
         with open_target_store(config.target) as store:
             current = load_current(ledger_path, config.config_sha256)
-            assets = iter_download_candidates(current, limit)
+            assets = iter_fetch_candidates(current, limit)
             client = http_client(config.source_requests)
             try:
-                context = DownloadContext(
+                context = FetchContext(
                     store=store,
                     http=client,
                     ledger_path=ledger_path,
                     retry_delay=config.source_requests.backoff_max_seconds,
                 )
-                outcomes = run_downloads(context, assets, config.source_requests.max_concurrent_requests)
-                return summarize_downloads(outcomes)
+                outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
+                return summarize_fetches(outcomes)
             finally:
                 client.close()
 
 
-def iter_download_candidates(
+def iter_fetch_candidates(
     current: CurrentState,
     limit: int | None,
 ) -> Iterator[SourceAsset]:
-    """Yield source assets eligible for another download attempt."""
+    """Yield source assets eligible for another fetch attempt."""
     assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
     yield from islice(assets, limit)
 
 
-def run_downloads(
-    context: DownloadContext,
+def run_fetches(
+    context: FetchContext,
     assets: Iterable[SourceAsset],
     max_concurrent_requests: int,
-) -> Iterator[DownloadOutcome]:
-    """Apply one download function concurrently while retaining input ordering."""
+) -> Iterator[FetchOutcome]:
+    """Apply one fetch function concurrently while retaining input ordering."""
     with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
-        yield from executor.map(context.download, assets)
+        yield from executor.map(context.fetch, assets)
 
 
-def summarize_downloads(outcomes: Iterable[DownloadOutcome]) -> DownloadSummary:
-    """Reduce individual download outcomes into a typed stage summary."""
-    downloaded = 0
+def summarize_fetches(outcomes: Iterable[FetchOutcome]) -> FetchSummary:
+    """Reduce individual source-fetch outcomes into a typed stage summary."""
+    fetched = 0
     already_present = 0
     failed = 0
     for outcome in outcomes:
         match outcome:
-            case Downloaded():
-                downloaded += 1
-            case AlreadyDownloaded():
+            case Fetched():
+                fetched += 1
+            case AlreadyPresent():
                 already_present += 1
-            case DownloadFailed():
+            case FetchFailed():
                 failed += 1
-    return DownloadSummary(downloaded, already_present, failed)
+    return FetchSummary(fetched, already_present, failed)
 
 
 def _content_type(asset: SourceAsset) -> str:

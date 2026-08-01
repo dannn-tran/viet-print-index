@@ -60,8 +60,14 @@ def source_discovered(asset: Asset) -> LedgerEvent:
     return _event("source_discovered", asset.key, {"asset": asset.to_dict()})
 
 
-def source_downloaded(asset: Asset, *, checksum: str, size_bytes: int) -> LedgerEvent:
+def source_fetched(asset: Asset, *, checksum: str, size_bytes: int) -> LedgerEvent:
+    """Record a fetched source using the established serialized event name."""
     return _event("source_downloaded", asset.key, {"checksum": checksum, "size_bytes": size_bytes})
+
+
+def source_downloaded(asset: Asset, *, checksum: str, size_bytes: int) -> LedgerEvent:
+    """Backward-compatible constructor for the historical event name."""
+    return source_fetched(asset, checksum=checksum, size_bytes=size_bytes)
 
 
 def image_normalized(asset: Asset) -> LedgerEvent:
