@@ -1,6 +1,7 @@
 from datetime import date
 from itertools import islice
 import unittest
+from unittest.mock import patch
 
 from vie_doc_pipeline.pipeline_config import VeridianSource
 from vie_doc_pipeline.sources.veridian import Issue, iter_source_items_from_veridian, issues_from_catalogue_html, page_image_url, parse_pages
@@ -25,8 +26,14 @@ class VeridianParsingTest(unittest.TestCase):
         <a href="?a=d&amp;d=Other19510101&amp;e=x">other title</a>
         <a href="?a=d&amp;d=WNyf19511301&amp;e=x">invalid date</a>
         """
-        issues = issues_from_catalogue_html(catalogue_html, "WNyf")
+        with patch("vie_doc_pipeline.sources.veridian.logger.warning") as warning:
+            issues = issues_from_catalogue_html(catalogue_html, "WNyf")
+
         self.assertEqual(issues, [Issue("WNyf19510101", date(1951, 1, 1))])
+        warning.assert_called_once_with(
+            "Ignoring Veridian issue ID with an invalid encoded date: %s",
+            "WNyf19511301",
+        )
 
     def test_full_page_url_uses_native_crop(self) -> None:
         page = parse_pages("var documentOID = 'WNyf19510101'; var pageImageSizes = { '1.1':{'w':1890,'h':2602} };", "WNyf19510101")[0]

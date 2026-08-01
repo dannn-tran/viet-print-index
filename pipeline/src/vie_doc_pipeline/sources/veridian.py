@@ -8,6 +8,7 @@ without network state.
 from __future__ import annotations
 
 import html
+import logging
 import re
 import urllib.parse
 from collections.abc import Callable, Iterator
@@ -16,6 +17,8 @@ from datetime import date
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import VeridianSource
+
+logger = logging.getLogger(__name__)
 
 _ISSUE_RE = re.compile(r"[?&]d=([A-Za-z0-9]+\d{8})")
 _DOCUMENT_OID_RE = re.compile(r"var documentOID = '([^']+)'\s*;")
@@ -105,7 +108,7 @@ def issue_from_oid(oid: str, *, title_id: str) -> Issue | None:
     if not oid.startswith(title_id):
         return None
     try:
-        published_on = date.fromisoformat(f"{oid[-8:-4]}-{oid[-4:-2]}-{oid[-2:]}")
+        return Issue(oid, date.fromisoformat(f"{oid[-8:-4]}-{oid[-4:-2]}-{oid[-2:]}"))
     except ValueError:
+        logger.warning("Ignoring Veridian issue ID with an invalid encoded date: %s", oid)
         return None
-    return Issue(oid, published_on)
