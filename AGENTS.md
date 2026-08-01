@@ -54,8 +54,10 @@ control flow, interfaces, effects, and failure modes are evident to a reader.
 - Keep factory selection comparable: implementations should expose the same
   primary method and follow one naming grammar. Put shared lifecycle handling
   at the factory/context-manager boundary, not in callers.
-- Prefer `Protocol` for a small consumer-facing interface. Depend on that
-  interface at the boundary; keep concrete implementation details internal.
+- Use an `ABC` for a closed, factory-owned family with a lifecycle or a runtime
+  contract that implementations must satisfy. Use `Protocol` for an open
+  boundary where independently defined or third-party implementations should
+  participate structurally. Keep concrete implementation details internal.
 
 ## Make control flow linear and unsurprising
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Protocol
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import (
@@ -26,16 +26,20 @@ from vie_doc_pipeline.sources.pdf import (
 from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian
 
 
-class SourceItemProvider(Protocol):
+class SourceItemProvider(ABC):
     """One source-specific enumeration session."""
 
-    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]: ...
+    @abstractmethod
+    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
+        """Yield this session's source items."""
 
-    def close(self) -> None: ...
+    @abstractmethod
+    def close(self) -> None:
+        """Release resources owned by this session."""
 
 
 @dataclass(frozen=True)
-class UrlSequenceSourceItemProvider:
+class UrlSequenceSourceItemProvider(SourceItemProvider):
     source: UrlSequencePdfSource
 
     @classmethod
@@ -55,7 +59,7 @@ class UrlSequenceSourceItemProvider:
 
 
 @dataclass(frozen=True)
-class UrlListSourceItemProvider:
+class UrlListSourceItemProvider(SourceItemProvider):
     source: UrlListPdfSource
 
     @classmethod
@@ -70,7 +74,7 @@ class UrlListSourceItemProvider:
 
 
 @dataclass(frozen=True)
-class LocalDirectorySourceItemProvider:
+class LocalDirectorySourceItemProvider(SourceItemProvider):
     source: LocalPdfSource
 
     @classmethod
@@ -85,7 +89,7 @@ class LocalDirectorySourceItemProvider:
 
 
 @dataclass(frozen=True)
-class VeridianSourceItemProvider:
+class VeridianSourceItemProvider(SourceItemProvider):
     source: VeridianSource
     http: HttpClient
 
@@ -101,7 +105,7 @@ class VeridianSourceItemProvider:
 
 
 @dataclass(frozen=True)
-class WebPageSourceItemProvider:
+class WebPageSourceItemProvider(SourceItemProvider):
     source: WebPagePdfSource
     http: HttpClient
 
