@@ -4,32 +4,41 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from collections.abc import Callable, Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
-from vie_doc_pipeline.pipeline_config import SourceConfig
 
 
-def iter_pdf_items(config: SourceConfig, fetch_text: Callable[[str], str]) -> Iterator[DiscoveredSourceItem]:
-    """Yield PDF source items for the configured non-image source type."""
-    match config.type:
-        case "web_page":
-            assert config.page_url, "page_url required for web_page source type"
-            urls = _pdf_urls_from_page(config.page_url, fetch_text(config.page_url))
-        case "url_sequence":
-            base = (config.base_url or "").rstrip("/")
-            pattern = config.pattern or "{}.pdf"
-            start, end = config.range or (1, 1)
-            urls = (f"{base}/{pattern.format(i)}" for i in range(start, end + 1))
-            urls = (*urls, *config.urls)
-        case "url_list":
-            urls = config.urls
-        case "local_dir":
-            path = config.path or "."
-            urls = [str(item) for item in sorted(Path(path).glob("*.pdf"))]
-        case _:
-            raise ValueError(f"Unknown PDF source type: {config.type!r}")
+def iter_web_page_pdf_items(page_url: str, page_html: str) -> Iterator[DiscoveredSourceItem]:
+    """Yield PDFs linked by one already-fetched index page."""
+    yield from pdf_items(_pdf_urls_from_page(page_url, page_html))
+
+
+def iter_url_sequence_pdf_items(
+    base_url: str,
+    pattern: str,
+    issue_range: tuple[int, int],
+    extra_urls: Iterable[str],
+) -> Iterator[DiscoveredSourceItem]:
+    """Yield PDFs named by a numeric URL sequence plus any explicit exceptions."""
+    start, end = issue_range
+    sequence = (f"{base_url.rstrip('/')}/{pattern.format(number)}" for number in range(start, end + 1))
+    yield from pdf_items((*sequence, *extra_urls))
+
+
+def iter_url_list_pdf_items(urls: Iterable[str]) -> Iterator[DiscoveredSourceItem]:
+    """Yield the configured explicit PDF URLs."""
+    yield from pdf_items(urls)
+
+
+def iter_local_pdf_items(path: str) -> Iterator[DiscoveredSourceItem]:
+    """Yield PDFs in a local source directory."""
+    yield from pdf_items(str(item) for item in sorted(Path(path).glob("*.pdf")))
+
+
+def pdf_items(urls: Iterable[str]) -> Iterator[DiscoveredSourceItem]:
+    """Deduplicate source URLs while retaining first-seen ordering."""
     yield from (DiscoveredSourceItem(kind="pdf", source_url=url) for url in dict.fromkeys(urls))
 
 
