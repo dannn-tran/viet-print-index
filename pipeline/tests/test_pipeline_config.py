@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource, parse_source, load_config
+from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, load_config
 
 
 class PipelineConfigTest(unittest.TestCase):
@@ -34,6 +34,14 @@ class PipelineConfigTest(unittest.TestCase):
                 "from_date": "not-a-date",
                 "to_date": "1951-01-31",
             })
+
+    def test_rejects_coercible_but_invalid_config_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "explode.negate_png"):
+            parse_explode({"negate_png": "false"})
+        with self.assertRaisesRegex(ValueError, "ocr.language_hints"):
+            parse_ocr({"language_hints": "vi"})
+        with self.assertRaisesRegex(ValueError, "source.type"):
+            parse_source({"type": 1})
 
     def test_rejects_incomplete_veridian_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
