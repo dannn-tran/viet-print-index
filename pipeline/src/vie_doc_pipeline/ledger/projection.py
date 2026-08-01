@@ -18,6 +18,11 @@ def project_current(events: list[LedgerEvent]) -> CurrentState:
         if event.event == "failed":
             state["failure"] = {"at": event.at, **event.data}
             continue
+        if event.event == "image_inverted":
+            state["inverted_override"] = True
+            continue
+        if event.event == "source_inverted":
+            continue
         state["event"] = event.event
         state["at"] = event.at
         state.update(event.data)

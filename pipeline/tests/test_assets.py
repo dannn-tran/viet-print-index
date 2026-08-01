@@ -45,11 +45,13 @@ class AssetDiscoveryTest(unittest.TestCase):
             append_event(ledger_path, source_downloaded(asset, checksum="checksum", size_bytes=10))
             client = _FakeStorageClient()
 
-            with patch("vie_doc_pipeline.workflow.normalize_images.storage.Client", return_value=client):
+            with patch("vie_doc_pipeline.workflow.normalize_images.storage.Client", return_value=client), \
+                 patch("vie_doc_pipeline.workflow.normalize_images.check_inversion") as check:
+                check.return_value = Mock(inverted=False, needs_review=False)
                 pages, passthrough = normalize_images(config, ledger_path)
 
             self.assertEqual((pages, passthrough), (0, 1))
-            self.assertEqual(client.bucket_instance.blob_names, [])
+            self.assertEqual(client.bucket_instance.uploads, [])
             self.assertEqual(load_current(ledger_path)[asset.key]["event"], "image_normalized")
 
     def test_discovery_does_not_overwrite_existing_ledger_state(self) -> None:
@@ -70,11 +72,22 @@ class AssetDiscoveryTest(unittest.TestCase):
 
 class _FakeBucket:
     def __init__(self) -> None:
-        self.blob_names: list[str] = []
+        self.uploads: list[str] = []
 
-    def blob(self, name: str) -> object:
-        self.blob_names.append(name)
-        raise AssertionError("native image materialization must not access a blob")
+    def blob(self, name: str) -> "_FakeBlob":
+        return _FakeBlob(name, self.uploads)
+
+
+class _FakeBlob:
+    def __init__(self, name: str, uploads: list[str]) -> None:
+        self.name = name
+        self.uploads = uploads
+
+    def download_as_bytes(self, timeout: int) -> bytes:
+        return b"source image is inspected but never copied"
+
+    def upload_from_string(self, data: bytes, **kwargs: object) -> None:
+        self.uploads.append(self.name)
 
 
 class _FakeStorageClient:

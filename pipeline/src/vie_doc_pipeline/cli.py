@@ -1,13 +1,17 @@
 """Command-line interface for the source-to-OCR workflow."""
 
+from collections import Counter
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
 
 from vie_doc_pipeline.logging import configure_logging
-from vie_doc_pipeline.pipeline_config import load_config
+from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
+from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.paths import default_ledger_path
+from vie_doc_pipeline.ledger.projection import load_current
+from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.workflow.calibrate_images import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.download_source import download_source_assets
@@ -30,26 +34,15 @@ _StateDir = Annotated[Path, typer.Option(help="Directory for inspectable JSONL s
 
 
 @app.command()
-def status(pub_id: _PubArg, config_dir: _ConfigDir = "sources") -> None:
-    """Show GCS object counts for a publication."""
-    from google.cloud import storage
-
-    config = load_config(pub_id, config_dir)
-    client = storage.Client(project=config.gcs.project)
-
-    def _count(prefix: str, suffix: str) -> int:
-        return sum(1 for blob in client.list_blobs(config.gcs.bucket, prefix=prefix + "/") if blob.name.endswith(suffix))
-
-    def _count_dirs(prefix: str) -> int:
-        blobs_page = client.list_blobs(config.gcs.bucket, prefix=prefix + "/", delimiter="/")
-        list(blobs_page)
-        return len(blobs_page.prefixes)
-
-    print(f"Publication : {config.publication.name} ({pub_id})")
-    print(f"GCS bucket  : gs://{config.gcs.bucket}")
-    print(f"  PDFs      : {_count(config.gcs.pdf_prefix, '.pdf'):>6}  ({config.gcs.pdf_prefix}/)")
-    print(f"  Images    : {_count_dirs(config.gcs.images_prefix):>6}  ({config.gcs.images_prefix}/)")
-    print(f"  OCR blobs : {_count(config.gcs.ocr_output_prefix, '.json'):>6}  ({config.gcs.ocr_output_prefix}/)")
+def status(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
+    """Summarise current workflow lifecycle and review states."""
+    current = load_current(default_ledger_path(pub_id, state_dir))
+    counts = Counter(str(item.get("event", "untracked")) for item in current.values() if "event" in item)
+    review = sum(1 for item in current.values() if item.get("needs_review"))
+    print(f"Assets      : {len(current)}")
+    for event, count in sorted(counts.items()):
+        print(f"  {event:<22} {count:>6}")
+    print(f"Needs review: {review}")
 
 
 @source_app.command("discover")
@@ -89,14 +82,35 @@ def images_normalize(
     config_dir: _ConfigDir = "sources",
     limit: _Limit = None,
     state_dir: _StateDir = Path(".pipeline-state"),
+    source_id: Annotated[Optional[str], typer.Option(help="Issue or PDF identifier to normalize")] = None,
+    image_id: Annotated[Optional[str], typer.Option(help="Ledger image asset key to normalize")] = None,
+    inverted: Annotated[bool, typer.Option(help="Invert this source or image before OCR and presentation")] = False,
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    images, passthrough = normalize_images(config, ledger_path, limit=limit)
+    if inverted:
+        if bool(source_id) == bool(image_id):
+            raise typer.BadParameter("--inverted requires exactly one of --source-id or --image-id")
+        append_event(ledger_path, source_inverted(source_id) if source_id else image_inverted(image_id or ""))
+    images, passthrough = normalize_images(config, ledger_path, limit=limit, source_id=source_id, image_key=image_id)
     print(f"Images created: {images}")
     print(f"Native images : {passthrough} (registered without copying)")
     print(f"Ledger      : {ledger_path}")
+
+
+@images_app.command("review")
+def images_review(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
+    """List normalized images that were retained unchanged for manual review."""
+    current = load_current(default_ledger_path(pub_id, state_dir))
+    flagged = [(key, item) for key, item in current.items() if item.get("needs_review")]
+    if not flagged:
+        print("No images need review.")
+        return
+    for key, item in flagged:
+        asset = item.get("asset", {})
+        source_id = asset.get("issue_id", "") if isinstance(asset, dict) else ""
+        print(f"{key}\n  vie-pipeline images normalize {pub_id} --source-id {source_id} --inverted")
 
 
 @images_app.command("calibrate")

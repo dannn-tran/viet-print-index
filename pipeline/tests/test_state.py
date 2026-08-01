@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from vie_doc_pipeline.ledger.events import image_normalized, ocr_job_submitted, source_discovered, source_downloaded
+from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
@@ -30,3 +30,15 @@ class JsonlLedgerTest(unittest.TestCase):
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
             self.assertEqual(load_current(path)[asset.key]["job_id"], "operation-1")
             self.assertEqual(len(read_events(path)), 4)
+
+    def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            append_event(path, source_discovered(ImageAsset(
+                publication_id="pub", issue_id="issue", page_id="001", source_url="https://example.test/1", gcs_object="pub/images/1.jpg"
+            )))
+            asset_key = "pub/issue/001"
+            append_event(path, failed(asset_key, stage="download", error="temporary failure"))
+            current = load_current(path)[asset_key]
+            self.assertEqual(current["event"], "source_discovered")
+            self.assertEqual(current["failure"]["stage"], "download")

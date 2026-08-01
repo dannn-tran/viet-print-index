@@ -65,6 +65,8 @@ class ImageAsset:
     kind: AssetKind = "image"
     width: int | None = None
     height: int | None = None
+    inverted: bool = False
+    needs_review: bool = False
 
     @property
     def key(self) -> str:
@@ -84,6 +86,8 @@ class ImageAsset:
             kind=str(raw.get("kind", "image")),  # type: ignore[arg-type]
             width=int(raw["width"]) if raw.get("width") is not None else None,
             height=int(raw["height"]) if raw.get("height") is not None else None,
+            inverted=bool(raw.get("inverted", False)),
+            needs_review=bool(raw.get("needs_review", False)),
         )
 
 
@@ -98,7 +102,7 @@ class LedgerEvent:
 
     event: Literal[
         "source_discovered", "source_downloaded", "image_normalized",
-        "ocr_job_submitted", "ocr_output_available", "failed",
+        "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
     ]
     asset_key: str
     at: str

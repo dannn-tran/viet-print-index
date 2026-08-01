@@ -34,9 +34,17 @@ def failed(asset_key: str, *, stage: str, error: str) -> LedgerEvent:
     return _event("failed", asset_key, {"stage": stage, "error": error})
 
 
+def source_inverted(source_id: str) -> LedgerEvent:
+    return _event("source_inverted", source_id, {"inverted": True})
+
+
+def image_inverted(image_key: str) -> LedgerEvent:
+    return _event("image_inverted", image_key, {"inverted": True})
+
+
 EventName = Literal[
     "source_discovered", "source_downloaded", "image_normalized",
-    "ocr_job_submitted", "ocr_output_available", "failed",
+    "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
 ]
 
 
