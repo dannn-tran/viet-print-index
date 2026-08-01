@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
 import time
@@ -36,31 +37,37 @@ class CurrentAssetState:
 CurrentState = dict[str, CurrentAssetState]
 
 
-def project_current(events: list[LedgerEvent]) -> CurrentState:
-    """Project latest successful lifecycle state while retaining last failures."""
+def apply_event(states: CurrentState, event: LedgerEvent) -> CurrentState:
+    """Apply one event to a mutable projection and return that projection."""
+    if event.event == "ledger_initialized":
+        return states
+    state = states.setdefault(event.asset_key, CurrentAssetState())
+    if event.event == "failed":
+        states[event.asset_key] = replace(state, failure=_failure_from_event(event))
+        return states
+    if event.event == "image_inverted":
+        states[event.asset_key] = replace(state, inverted_override=True)
+        return states
+    if event.event == "source_inverted":
+        return states
+    states[event.asset_key] = replace(
+        state,
+        event=event.event,
+        at=event.at,
+        asset=_event_asset(event) or state.asset,
+        failure=None,
+        job_id=_string_data(event, "job_id") or state.job_id,
+        output_prefix=_string_data(event, "output_prefix") or state.output_prefix,
+        output_uris=_tuple_data(event, "output_uris") or state.output_uris,
+    )
+    return states
+
+
+def project_current(events: Iterable[LedgerEvent]) -> CurrentState:
+    """Replay events into the latest successful lifecycle state."""
     states: CurrentState = {}
     for event in events:
-        if event.event == "ledger_initialized":
-            continue
-        state = states.setdefault(event.asset_key, CurrentAssetState())
-        if event.event == "failed":
-            states[event.asset_key] = replace(state, failure=_failure_from_event(event))
-            continue
-        if event.event == "image_inverted":
-            states[event.asset_key] = replace(state, inverted_override=True)
-            continue
-        if event.event == "source_inverted":
-            continue
-        states[event.asset_key] = replace(
-            state,
-            event=event.event,
-            at=event.at,
-            asset=_event_asset(event) or state.asset,
-            failure=None,
-            job_id=_string_data(event, "job_id") or state.job_id,
-            output_prefix=_string_data(event, "output_prefix") or state.output_prefix,
-            output_uris=_tuple_data(event, "output_uris") or state.output_uris,
-        )
+        apply_event(states, event)
     return states
 
 

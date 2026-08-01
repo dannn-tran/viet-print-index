@@ -16,13 +16,13 @@ class JsonlLedgerTest(unittest.TestCase):
             ensure_ledger_config(path, "a" * 64)
             ensure_ledger_config(path, "a" * 64)
 
-            self.assertEqual(read_events(path, "a" * 64)[0].event, "ledger_initialized")
-            self.assertEqual(len(read_events(path)), 1)
+            self.assertEqual(list(read_events(path, "a" * 64))[0].event, "ledger_initialized")
+            self.assertEqual(len(list(read_events(path))), 1)
             with self.assertRaises(LedgerConfigMismatchError):
                 ensure_ledger_config(path, "b" * 64)
 
             with self.assertRaises(LedgerConfigMismatchError):
-                read_events(path, "b" * 64)
+                list(read_events(path, "b" * 64))
 
     def test_refuses_to_mix_legacy_events_with_a_fingerprinted_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -57,7 +57,7 @@ class JsonlLedgerTest(unittest.TestCase):
             self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
             self.assertEqual(load_current(path)[asset.key].job_id, "operation-1")
-            self.assertEqual(len(read_events(path)), 4)
+            self.assertEqual(len(list(read_events(path))), 4)
 
     def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -95,4 +95,4 @@ class JsonlLedgerTest(unittest.TestCase):
             path.write_text('{"event":"future_event","asset_key":"asset","at":"now","data":{}}\n', encoding="utf-8")
 
             with self.assertRaisesRegex(ValueError, "Invalid ledger event"):
-                read_events(path)
+                list(read_events(path))
