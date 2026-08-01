@@ -13,7 +13,6 @@ import urllib.parse
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
-from functools import partial
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import VeridianSource
@@ -94,8 +93,11 @@ def parse_pages(issue_html: str, expected_issue_oid: str) -> list[Page]:
 
 def issues_from_catalogue_html(catalogue_html: str, title_id: str) -> list[Issue]:
     oids = dict.fromkeys(_ISSUE_RE.findall(html.unescape(catalogue_html)))
-    parse = partial(issue_from_oid, title_id=title_id)
-    return [issue for issue in map(parse, oids) if issue is not None]
+    return [
+        issue
+        for oid in oids
+        if (issue := issue_from_oid(oid, title_id=title_id)) is not None
+    ]
 
 
 def issue_from_oid(oid: str, *, title_id: str) -> Issue | None:
