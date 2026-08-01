@@ -92,6 +92,30 @@ vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
 vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
 ```
 
+### Resilient acquisition
+
+HTTP acquisition is generic across source adapters. Configure bounded
+concurrency, source-wide request pacing, and urllib3 retry behaviour per
+publication:
+
+```toml
+[acquisition]
+max_workers = 2
+min_request_interval_seconds = 1.0
+max_attempts = 5
+backoff_factor = 1.0
+backoff_max_seconds = 30.0
+backoff_jitter_seconds = 0.5
+```
+
+The request interval applies to every initial request and retry across worker
+threads. Temporary network failures and HTTP `429`, `500`, `502`, `503`, and
+`504` retry with backoff and respect `Retry-After`; other HTTP 4xx responses
+are recorded as permanent failures. Each completed download is immediately
+written to the ledger. Re-running `source download` resumes eligible work,
+skips GCS objects already present, and leaves permanent failures untouched.
+Only one acquisition command may run for a publication at once.
+
 An `ImageAsset` may be a page, spread, cover, or other scanned unit. Native
 images that need no correction remain at their original GCS object; PDF sources
 produce derived images. These image assets are the shared coordinate canvas for
