@@ -1,6 +1,6 @@
 import unittest
 
-from vie_doc_pipeline.stages.ocr import _parse_gs_uri
+from vie_doc_pipeline.workflow.ocr import _parse_gs_uri
 
 
 class OcrStateTest(unittest.TestCase):

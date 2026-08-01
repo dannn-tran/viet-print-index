@@ -1,6 +1,4 @@
-"""Persistent OCR submission and reconciliation backed by the JSONL ledger."""
-
-from __future__ import annotations
+"""Submit and check asynchronous OCR jobs for image assets."""
 
 from google.cloud import storage
 
@@ -10,13 +8,12 @@ from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.state import JsonlStateStore
 
 
-def submit_ocr(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> int:
+def submit_ocr_jobs(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> int:
     current = state.current()
     assets = [
         PageAsset.from_dict(raw["asset"])
         for raw in current.values()
-        if raw.get("event") == "materialized"
-        and isinstance(raw.get("asset"), dict)
+        if raw.get("event") == "materialized" and isinstance(raw.get("asset"), dict)
         and raw["asset"].get("kind", "image") == "image"
     ]
     if limit is not None:
@@ -34,15 +31,13 @@ def submit_ocr(config: PipelineConfig, state: JsonlStateStore, limit: int | None
     jobs = submit_ocr_batches(config.gcs.project, command, list(uri_to_asset))
     for job in jobs:
         state.record_ocr_submitted(
-            [uri_to_asset[uri].key for uri in job.input_uris],
-            job_id=job.job_id,
-            output_prefix=job.output_prefix,
+            [uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix
         )
     return len(assets)
 
 
-def reconcile_ocr(config: PipelineConfig, state: JsonlStateStore) -> tuple[int, int]:
-    """Mark submitted jobs complete once their expected output appears in GCS."""
+def check_ocr_status(config: PipelineConfig, state: JsonlStateStore) -> tuple[int, int]:
+    """Check for OCR results in GCS and return completed and pending image counts."""
     current = state.current()
     by_job: dict[tuple[str, str], list[str]] = {}
     for asset_key, raw in current.items():

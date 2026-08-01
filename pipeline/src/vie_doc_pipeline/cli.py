@@ -8,10 +8,12 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
-from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets, materialize_pages
-from vie_doc_pipeline.stages.calibrate import run_calibrate
-from vie_doc_pipeline.stages.ocr import reconcile_ocr, submit_ocr
 from vie_doc_pipeline.state import JsonlStateStore, default_state_path
+from vie_doc_pipeline.workflow.calibrate_images import run_image_calibration
+from vie_doc_pipeline.workflow.discover_source import discover_source_assets
+from vie_doc_pipeline.workflow.download_source import download_source_assets
+from vie_doc_pipeline.workflow.normalize_images import normalize_images
+from vie_doc_pipeline.workflow.ocr import check_ocr_status, submit_ocr_jobs
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index source-to-OCR pipeline")
@@ -61,7 +63,7 @@ def source_discover(
     """Discover external source records into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    assets = discover_assets(config, state, limit=limit)
+    assets = discover_source_assets(config, state, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"State       : {state.path}")
 
@@ -76,7 +78,7 @@ def source_download(
     """Download discovered original source assets into GCS."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    downloaded, existing = fetch_assets(config, state, limit=limit)
+    downloaded, existing = download_source_assets(config, state, limit=limit)
     print(f"Downloaded  : {downloaded}")
     print(f"Already in GCS: {existing}")
     print(f"State       : {state.path}")
@@ -92,7 +94,7 @@ def images_normalize(
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    images, passthrough = materialize_pages(config, state, limit=limit)
+    images, passthrough = normalize_images(config, state, limit=limit)
     print(f"Images created: {images}")
     print(f"Native images : {passthrough} (registered without copying)")
     print(f"State       : {state.path}")
@@ -106,7 +108,7 @@ def images_calibrate(
     out_dir: Annotated[Optional[Path], typer.Option(help="Output directory")] = None,
 ) -> None:
     """Inspect PDF-to-image variants for a representative source asset."""
-    run_calibrate(load_config(pub_id, config_dir), pdf, out_dir)
+    run_image_calibration(load_config(pub_id, config_dir), pdf, out_dir)
 
 
 @ocr_app.command("submit-jobs")
@@ -119,7 +121,7 @@ def ocr_submit_jobs(
     """Submit OCR jobs for normalized image assets without waiting."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    submitted = submit_ocr(config, state, limit=limit)
+    submitted = submit_ocr_jobs(config, state, limit=limit)
     print(f"Submitted   : {submitted} images")
     print(f"State       : {state.path}")
 
@@ -133,7 +135,7 @@ def ocr_check_status(
     """Report whether submitted OCR jobs have result files in GCS."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    completed, pending = reconcile_ocr(config, state)
+    completed, pending = check_ocr_status(config, state)
     print(f"Completed   : {completed} images")
     print(f"Pending     : {pending} images")
     print(f"State       : {state.path}")
