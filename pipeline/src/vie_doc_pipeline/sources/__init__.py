@@ -17,7 +17,7 @@ def discover_source_items(config: SourceConfig, limit: int | None = None) -> lis
     """Discover source items using the adapter selected by ``config.type``."""
     if config.type == "veridian":
         fetch = rate_limited(fetch_text, config.delay_seconds)
-        items = discover_pages(config, fetch)
+        return discover_pages(config, fetch, limit)
     else:
         items = discover_pdf_items(config, fetch_text)
     return items[:limit] if limit is not None else items

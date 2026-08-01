@@ -45,33 +45,37 @@ class Page:
         return self.page_id + ".jpg"
 
 
-def discover_pages(config: SourceConfig, fetch_text: Callable[[str], str]) -> list[SourceItem]:
+def discover_pages(
+    config: SourceConfig,
+    fetch_text: Callable[[str], str],
+    limit: int | None = None,
+) -> list[SourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
     assert config.catalogue_url and config.image_server_url and config.title_id
     from_date = parse_date(config.from_date, "from_date") if config.from_date else None
     to_date = parse_date(config.to_date, "to_date") if config.to_date else None
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    issues: dict[str, Issue] = {}
+    result: list[SourceItem] = []
     for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id):
         if not month_overlaps(year, month, from_date, to_date):
             continue
-        for issue in issues_from_month_html(fetch_text(month_url), config.title_id):
-            if in_range(issue.published_on, from_date, to_date):
-                issues[issue.oid] = issue
-
-    result: list[SourceItem] = []
-    for issue in sorted(issues.values(), key=lambda item: item.published_on):
-        issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
-        for page in parse_pages(issue_html, issue.oid):
-            result.append(SourceItem(
-                kind="image",
-                source_url=page_image_url(config.image_server_url, page),
-                issue_id=issue.oid,
-                page_id=page.page_id,
-                width=page.width,
-                height=page.height,
-            ))
+        issues = sorted(issues_from_month_html(fetch_text(month_url), config.title_id), key=lambda item: item.published_on)
+        for issue in issues:
+            if not in_range(issue.published_on, from_date, to_date):
+                continue
+            issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
+            for page in parse_pages(issue_html, issue.oid):
+                result.append(SourceItem(
+                    kind="image",
+                    source_url=page_image_url(config.image_server_url, page),
+                    issue_id=issue.oid,
+                    page_id=page.page_id,
+                    width=page.width,
+                    height=page.height,
+                ))
+                if limit is not None and len(result) >= limit:
+                    return result
     return result
 
 

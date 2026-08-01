@@ -6,6 +6,10 @@ import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from typing import TypeVar
+
+
+T = TypeVar("T")
 
 
 def fetch_bytes(url: str) -> bytes:
@@ -32,11 +36,11 @@ def encode_url(url: str) -> str:
     return urllib.parse.urlunsplit(parts._replace(path=path, query=query))
 
 
-def rate_limited(fetch: Callable[[str], str], delay_seconds: float) -> Callable[[str], str]:
+def rate_limited(fetch: Callable[[str], T], delay_seconds: float) -> Callable[[str], T]:
     """Return a paced fetch function; mutable timing stays inside this closure."""
     last_request_at: float | None = None
 
-    def paced_fetch(url: str) -> str:
+    def paced_fetch(url: str) -> T:
         nonlocal last_request_at
         if last_request_at is not None and delay_seconds:
             remaining = delay_seconds - (time.monotonic() - last_request_at)

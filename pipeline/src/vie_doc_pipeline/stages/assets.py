@@ -13,7 +13,7 @@ from vie_doc_pipeline.models import DocumentAsset, PageAsset, SourceItem
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources import discover_source_items
-from vie_doc_pipeline.sources.http import fetch_bytes
+from vie_doc_pipeline.sources.http import fetch_bytes, rate_limited
 from vie_doc_pipeline.state import JsonlStateStore
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def fetch_assets(config: PipelineConfig, state: JsonlStateStore, limit: int | No
 
     fetched = 0
     skipped = 0
+    fetch = rate_limited(fetch_bytes, config.source.delay_seconds) if config.source.type == "veridian" else fetch_bytes
     for asset in assets:
         blob = bucket.blob(asset.object_name)
         if blob.exists(client):
@@ -52,7 +53,7 @@ def fetch_assets(config: PipelineConfig, state: JsonlStateStore, limit: int | No
             skipped += 1
             continue
         try:
-            data = fetch_bytes(asset.source_url)
+            data = fetch(asset.source_url)
             checksum = hashlib.sha256(data).hexdigest()
             blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
             state.record_fetched(asset, checksum=checksum, size_bytes=len(data))
