@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
-from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
+from vie_doc_pipeline.ledger.events import source_discovered, source_fetched
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.assets import ImageAsset
@@ -51,7 +51,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
             append_event(ledger_path, source_discovered(asset))
-            append_event(ledger_path, source_downloaded(asset, checksum="checksum", size_bytes=10))
+            append_event(ledger_path, source_fetched(asset, checksum="checksum", size_bytes=10))
             store = _FakeTargetStore()
 
             with patch("vie_doc_pipeline.workflow.normalize_images.open_target_store", return_value=nullcontext(store)), \
