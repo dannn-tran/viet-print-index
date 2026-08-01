@@ -1,9 +1,10 @@
 """Discover external source records and record source assets."""
 
 from pathlib import Path
+from itertools import islice
 
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.sources import iter_source_items
+from vie_doc_pipeline.sources.discover import iter_source_items
 from vie_doc_pipeline.sources.http import http_client
 from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.ledger.projection import load_current
@@ -19,7 +20,7 @@ def discover_source_assets(
     try:
         current = load_current(ledger_path)
         new_assets: list[SourceAsset] = []
-        for item in iter_source_items(config.source, client.fetch_text, limit):
+        for item in islice(iter_source_items(config.source, client.fetch_text), limit):
             asset = asset_from_source_item(config, item)
             if asset.key not in current:
                 append_event(ledger_path, source_discovered(asset))

@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
@@ -8,7 +9,15 @@ from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
-from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
+from vie_doc_pipeline.pipeline_config import (
+    GcsConfig,
+    OcrConfig,
+    PipelineConfig,
+    PublicationConfig,
+    UrlListPdfSource,
+    VeridianSource,
+    WebPagePdfSource,
+)
 from vie_doc_pipeline.workflow.assets import asset_from_source_item
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.normalize_images import normalize_images
@@ -19,7 +28,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         config = PipelineConfig(
             publication=PublicationConfig(id="doi-moi", name="Đời Mới"),
             gcs=GcsConfig("project", "bucket", "doi-moi/pdf", "doi-moi/images", "doi-moi/ocr"),
-            source=SourceConfig(type="web_page"),
+            source=WebPagePdfSource(page_url="https://example.test/index"),
             explode=ExplodeParams(),
             ocr=OcrConfig(),
         )
@@ -34,7 +43,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         config = PipelineConfig(
             publication=PublicationConfig(id="cuu-quoc", name="Cứu Quốc"),
             gcs=GcsConfig("project", "bucket", "cuu-quoc/pdf", "cuu-quoc/images", "cuu-quoc/ocr"),
-            source=SourceConfig(type="veridian"),
+            source=VeridianSource("https://example.test/catalogue", "https://example.test/images", "WNyf", date(1945, 9, 1), date(1955, 4, 30)),
             explode=ExplodeParams(),
             ocr=OcrConfig(),
         )
@@ -58,7 +67,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         config = PipelineConfig(
             publication=PublicationConfig(id="cuu-quoc", name="Cứu Quốc"),
             gcs=GcsConfig("project", "bucket", "cuu-quoc/pdf", "cuu-quoc/images", "cuu-quoc/ocr"),
-            source=SourceConfig(type="veridian"),
+            source=VeridianSource("https://example.test/catalogue", "https://example.test/images", "WNyf", date(1945, 9, 1), date(1955, 4, 30)),
             explode=ExplodeParams(),
             ocr=OcrConfig(),
         )
@@ -72,7 +81,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         config = PipelineConfig(
             publication=PublicationConfig(id="doi-moi", name="Đời Mới"),
             gcs=GcsConfig("project", "bucket", "doi-moi/pdf", "doi-moi/images", "doi-moi/ocr"),
-            source=SourceConfig(type="url_list", urls=["https://example.test/001.pdf"]),
+            source=UrlListPdfSource(urls=("https://example.test/001.pdf",)),
             explode=ExplodeParams(),
             ocr=OcrConfig(),
         )
@@ -82,6 +91,23 @@ class AssetDiscoveryTest(unittest.TestCase):
             with patch("vie_doc_pipeline.workflow.discover_source.iter_source_items", return_value=[source_item]):
                 self.assertEqual(len(discover_source_assets(config, ledger_path)), 1)
                 self.assertEqual(discover_source_assets(config, ledger_path), [])
+
+    def test_discovery_applies_limit_after_source_dispatch(self) -> None:
+        config = PipelineConfig(
+            publication=PublicationConfig(id="doi-moi", name="Đời Mới"),
+            gcs=GcsConfig("project", "bucket", "doi-moi/pdf", "doi-moi/images", "doi-moi/ocr"),
+            source=UrlListPdfSource(urls=("https://example.test/001.pdf",)),
+            explode=ExplodeParams(),
+            ocr=OcrConfig(),
+        )
+        source_items = [
+            Mock(kind="pdf", source_url="https://example.test/001.pdf"),
+            Mock(kind="pdf", source_url="https://example.test/002.pdf"),
+        ]
+        with TemporaryDirectory() as directory:
+            ledger_path = Path(directory) / "state.jsonl"
+            with patch("vie_doc_pipeline.workflow.discover_source.iter_source_items", return_value=source_items):
+                self.assertEqual(len(discover_source_assets(config, ledger_path, limit=1)), 1)
 
 
 class _FakeBucket:

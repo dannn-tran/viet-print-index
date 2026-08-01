@@ -1,27 +1,39 @@
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
 
-from vie_doc_pipeline.pipeline_config import parse_source, load_config
+from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource, parse_source, load_config
 
 
 class PipelineConfigTest(unittest.TestCase):
-    def test_parse_source_normalizes_optional_values(self) -> None:
+    def test_parse_source_constructs_a_typed_sequence_source(self) -> None:
         source = parse_source({
             "type": "url_sequence",
             "range": [1, 2],
             "urls": ["extra.pdf"],
-            "from_date": "1951-01-01",
+            "base_url": "https://example.test/issues",
         })
 
-        self.assertEqual(source.range, (1, 2))
-        self.assertEqual(source.urls, ["extra.pdf"])
-        self.assertEqual(str(source.from_date), "1951-01-01")
-        self.assertIsNone(source.page_url)
+        self.assertEqual(
+            source,
+            UrlSequencePdfSource(
+                base_url="https://example.test/issues",
+                pattern="{}.pdf",
+                issue_range=(1, 2),
+                extra_urls=("extra.pdf",),
+            ),
+        )
 
     def test_rejects_invalid_source_date(self) -> None:
         with self.assertRaisesRegex(ValueError, "source.from_date"):
-            parse_source({"from_date": "not-a-date"})
+            parse_source({
+                "type": "veridian",
+                "catalogue_url": "https://example.test/catalogue",
+                "image_server_url": "https://example.test/images",
+                "title_id": "WNyf",
+                "from_date": "not-a-date",
+                "to_date": "1951-01-31",
+            })
 
     def test_rejects_incomplete_veridian_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

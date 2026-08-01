@@ -1,6 +1,6 @@
 """Veridian catalogue parsing and native-page URL construction.
 
-All deployment-specific endpoints are supplied by ``SourceConfig``. Functions
+All deployment-specific endpoints are supplied by ``VeridianSource``. Functions
 accept a fetch callable, keeping HTML parsing and URL construction testable
 without network state.
 """
@@ -11,12 +11,12 @@ import html
 import re
 import urllib.parse
 from collections.abc import Callable, Iterable, Iterator
-from itertools import chain, islice
 from dataclasses import dataclass
 from datetime import date
+from itertools import chain
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
-from vie_doc_pipeline.pipeline_config import SourceConfig
+from vie_doc_pipeline.pipeline_config import VeridianSource
 
 _MONTH_LINK_RE = re.compile(r'href="([^"]*a=cl[^" ]*cl=CL2\.(\d{4})\.(\d{2})[^" ]*)"')
 _ISSUE_RE = re.compile(r"[?&]d=([A-Za-z0-9]+\d{8})")
@@ -47,12 +47,10 @@ class Page:
 
 
 def iter_pages(
-    config: SourceConfig,
+    config: VeridianSource,
     fetch_text: Callable[[str], str],
-    limit: int | None = None,
 ) -> Iterator[DiscoveredSourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
-    assert config.catalogue_url and config.image_server_url and config.title_id
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
     month_htmls = (
@@ -69,7 +67,7 @@ def iter_pages(
         iter_issue_pages(config, issue, issue_html)
         for issue, issue_html in issue_htmls
     )
-    yield from islice(pages, limit)
+    yield from pages
 
 
 def iter_catalogue_issues(
@@ -85,12 +83,11 @@ def iter_catalogue_issues(
 
 
 def iter_issue_pages(
-    config: SourceConfig,
+    config: VeridianSource,
     issue: Issue,
     issue_html: str,
 ) -> Iterator[DiscoveredSourceItem]:
     """Yield native full-page images parsed from one already-fetched viewer page."""
-    assert config.image_server_url
     for page in parse_pages(issue_html, issue.oid):
         yield DiscoveredSourceItem(
             kind="image",

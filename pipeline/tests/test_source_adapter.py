@@ -1,8 +1,8 @@
 import unittest
 
-from vie_doc_pipeline.pipeline_config import SourceConfig
+from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource
 from vie_doc_pipeline.sources.http import encode_url
-from vie_doc_pipeline.sources import iter_source_items
+from vie_doc_pipeline.sources.discover import iter_source_items
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -21,12 +21,11 @@ class SourceAdapterTest(unittest.TestCase):
         )
 
     def test_sequence_source_includes_explicit_combined_issues(self) -> None:
-        config = SourceConfig(
-            type="url_sequence",
+        config = UrlSequencePdfSource(
             base_url="https://example.test/issues",
             pattern="{:03d}.pdf",
-            range=(1, 2),
-            urls=["https://example.test/issues/001-002.pdf"],
+            issue_range=(1, 2),
+            extra_urls=("https://example.test/issues/001-002.pdf",),
         )
 
         self.assertEqual([item.source_url for item in iter_source_items(config, lambda _: "")], [

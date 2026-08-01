@@ -1,8 +1,9 @@
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Literal, TypeAlias
 
 from vie_doc_pipeline.explode_mem import ExplodeParams
 
@@ -23,19 +24,40 @@ class GcsConfig:
 
 
 @dataclass(frozen=True)
-class SourceConfig:
-    type: str
-    page_url: str | None = None
-    base_url: str | None = None
-    pattern: str | None = None
-    range: tuple[int, int] | None = None
-    urls: list[str] = field(default_factory=list)
-    path: str | None = None
-    catalogue_url: str | None = None
-    image_server_url: str | None = None
-    title_id: str | None = None
-    from_date: date | None = None
-    to_date: date | None = None
+class VeridianSource:
+    catalogue_url: str
+    image_server_url: str
+    title_id: str
+    from_date: date
+    to_date: date
+
+
+@dataclass(frozen=True)
+class WebPagePdfSource:
+    page_url: str
+
+
+@dataclass(frozen=True)
+class UrlSequencePdfSource:
+    base_url: str
+    pattern: str
+    issue_range: tuple[int, int]
+    extra_urls: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class UrlListPdfSource:
+    urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LocalPdfSource:
+    path: str
+
+
+SourceConfig: TypeAlias = (
+    VeridianSource | WebPagePdfSource | UrlSequencePdfSource | UrlListPdfSource | LocalPdfSource
+)
 
 
 @dataclass(frozen=True)
@@ -97,21 +119,32 @@ def parse_gcs(raw: Mapping[str, object]) -> GcsConfig:
 
 
 def parse_source(raw: Mapping[str, object]) -> SourceConfig:
-    source_range = raw.get("range")
-    return SourceConfig(
-        type=str(raw.get("type", "local_dir")),
-        page_url=optional_string(raw.get("page_url")),
-        base_url=optional_string(raw.get("base_url")),
-        pattern=optional_string(raw.get("pattern")),
-        range=tuple(source_range) if source_range else None,  # type: ignore[arg-type]
-        urls=list(raw.get("urls", [])),  # type: ignore[arg-type]
-        path=optional_string(raw.get("path")),
-        catalogue_url=optional_string(raw.get("catalogue_url")),
-        image_server_url=optional_string(raw.get("image_server_url")),
-        title_id=optional_string(raw.get("title_id")),
-        from_date=parse_optional_date(raw.get("from_date"), "source.from_date"),
-        to_date=parse_optional_date(raw.get("to_date"), "source.to_date"),
-    )
+    """Decode a TOML source table into one valid, typed source variant."""
+    source_type = str(raw.get("type", "local_dir"))
+    match source_type:
+        case "veridian":
+            return VeridianSource(
+                catalogue_url=required_string(raw, "catalogue_url"),
+                image_server_url=required_string(raw, "image_server_url"),
+                title_id=required_string(raw, "title_id"),
+                from_date=parse_required_date(raw, "from_date"),
+                to_date=parse_required_date(raw, "to_date"),
+            )
+        case "web_page":
+            return WebPagePdfSource(page_url=required_string(raw, "page_url"))
+        case "url_sequence":
+            return UrlSequencePdfSource(
+                base_url=required_string(raw, "base_url"),
+                pattern=optional_string(raw.get("pattern")) or "{}.pdf",
+                issue_range=parse_issue_range(raw.get("range")),
+                extra_urls=parse_strings(raw.get("urls", ()), "urls"),
+            )
+        case "url_list":
+            return UrlListPdfSource(urls=parse_strings(raw.get("urls", ()), "urls"))
+        case "local_dir":
+            return LocalPdfSource(path=optional_string(raw.get("path")) or ".")
+        case _:
+            raise ValueError(f"Unknown source.type: {source_type!r}")
 
 
 def parse_explode(raw: Mapping[str, object]) -> ExplodeParams:
@@ -144,6 +177,28 @@ def optional_string(value: object | None) -> str | None:
     return str(value) if value is not None else None
 
 
+def required_string(raw: Mapping[str, object], field: str) -> str:
+    value = optional_string(raw.get(field))
+    if not value:
+        raise ValueError(f"source.{field} is required")
+    return value
+
+
+def parse_strings(value: object, field: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"source.{field} must be an array of strings")
+    return tuple(value)
+
+
+def parse_issue_range(value: object | None) -> tuple[int, int]:
+    if not isinstance(value, list) or len(value) != 2 or not all(isinstance(item, int) for item in value):
+        raise ValueError("source.range must be a two-item integer array")
+    start, end = value
+    if start > end:
+        raise ValueError("source.range start must not exceed end")
+    return start, end
+
+
 def parse_optional_date(value: object | None, field: str) -> date | None:
     """Convert an optional TOML ISO date string into a typed configuration value."""
     if value is None:
@@ -154,19 +209,14 @@ def parse_optional_date(value: object | None, field: str) -> date | None:
         raise ValueError(f"{field} must be YYYY-MM-DD, got {value!r}") from error
 
 
+def parse_required_date(raw: Mapping[str, object], field: str) -> date:
+    value = parse_optional_date(raw.get(field), f"source.{field}")
+    if value is None:
+        raise ValueError(f"source.{field} is required")
+    return value
+
+
 def _validate_config(config: PipelineConfig) -> None:
-    if config.source.type == "veridian":
-        missing = [
-            field for field, value in {
-                "source.title_id": config.source.title_id,
-                "source.catalogue_url": config.source.catalogue_url,
-                "source.image_server_url": config.source.image_server_url,
-                "source.from_date": config.source.from_date,
-                "source.to_date": config.source.to_date,
-            }.items() if not value
-        ]
-        if missing:
-            raise ValueError(f"Veridian source is missing required configuration: {', '.join(missing)}")
     if config.acquisition.max_workers < 1:
         raise ValueError("acquisition.max_workers must be at least one")
     if config.acquisition.min_request_interval_seconds < 0:
