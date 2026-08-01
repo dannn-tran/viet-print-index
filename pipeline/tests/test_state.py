@@ -50,3 +50,12 @@ class JsonlLedgerTest(unittest.TestCase):
             append_event(path, source_discovered(asset))
             append_event(path, failed(asset.key, stage="download", error="HTTP 404", retryable=False))
             self.assertEqual(eligible_source_assets(load_current(path)), [])
+
+    def test_successful_retry_clears_prior_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            asset = ImageAsset("pub", "issue", "001", "https://example.test/1", "pub/images/1.jpg")
+            append_event(path, source_discovered(asset))
+            append_event(path, failed(asset.key, stage="download", error="timeout"))
+            append_event(path, source_downloaded(asset, checksum="checksum", size_bytes=10))
+            self.assertNotIn("failure", load_current(path)[asset.key])

@@ -24,6 +24,7 @@ def project_current(events: list[LedgerEvent]) -> CurrentState:
             continue
         if event.event == "source_inverted":
             continue
+        state.pop("failure", None)
         state["event"] = event.event
         state["at"] = event.at
         state.update(event.data)
