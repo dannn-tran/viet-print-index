@@ -40,8 +40,8 @@ class VeridianParsingTest(unittest.TestCase):
             catalogue_url="https://example.test/catalogue",
             image_server_url="https://example.test/images",
             title_id="WNyf",
-            from_date="1951-01-01",
-            to_date="1951-01-31",
+            from_date=date(1951, 1, 1),
+            to_date=date(1951, 1, 31),
         )
         requested: list[str] = []
 

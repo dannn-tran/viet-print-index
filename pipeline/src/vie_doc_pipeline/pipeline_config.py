@@ -1,6 +1,7 @@
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 from vie_doc_pipeline.explode_mem import ExplodeParams
@@ -33,8 +34,8 @@ class SourceConfig:
     catalogue_url: str | None = None
     image_server_url: str | None = None
     title_id: str | None = None
-    from_date: str | None = None
-    to_date: str | None = None
+    from_date: date | None = None
+    to_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -108,8 +109,8 @@ def parse_source(raw: Mapping[str, object]) -> SourceConfig:
         catalogue_url=optional_string(raw.get("catalogue_url")),
         image_server_url=optional_string(raw.get("image_server_url")),
         title_id=optional_string(raw.get("title_id")),
-        from_date=optional_string(raw.get("from_date")),
-        to_date=optional_string(raw.get("to_date")),
+        from_date=parse_optional_date(raw.get("from_date"), "source.from_date"),
+        to_date=parse_optional_date(raw.get("to_date"), "source.to_date"),
     )
 
 
@@ -141,6 +142,16 @@ def parse_acquisition(raw: Mapping[str, object]) -> AcquisitionConfig:
 
 def optional_string(value: object | None) -> str | None:
     return str(value) if value is not None else None
+
+
+def parse_optional_date(value: object | None, field: str) -> date | None:
+    """Convert an optional TOML ISO date string into a typed configuration value."""
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as error:
+        raise ValueError(f"{field} must be YYYY-MM-DD, got {value!r}") from error
 
 
 def _validate_config(config: PipelineConfig) -> None:

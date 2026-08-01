@@ -53,11 +53,9 @@ def iter_pages(
 ) -> Iterator[DiscoveredSourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
     assert config.catalogue_url and config.image_server_url and config.title_id
-    from_date = parse_date(config.from_date, "from_date") if config.from_date else None
-    to_date = parse_date(config.to_date, "to_date") if config.to_date else None
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    issues = iter_catalogue_issues(config, fetch_text, catalogue_url, from_date, to_date, title_html)
+    issues = iter_catalogue_issues(config, fetch_text, catalogue_url, config.from_date, config.to_date, title_html)
     pages = (item for issue in issues for item in iter_issue_pages(config, fetch_text, catalogue_url, issue))
     yield from islice(pages, limit)
 
@@ -138,13 +136,6 @@ def issues_from_month_html(month_html: str, title_id: str) -> list[Issue]:
             except ValueError:
                 pass
     return list(issues.values())
-
-
-def parse_date(value: str, field: str) -> date:
-    try:
-        return date.fromisoformat(value)
-    except ValueError as error:
-        raise ValueError(f"{field} must be YYYY-MM-DD, got {value!r}") from error
 
 
 def month_overlaps(year: int, month: int, from_date: date | None, to_date: date | None) -> bool:

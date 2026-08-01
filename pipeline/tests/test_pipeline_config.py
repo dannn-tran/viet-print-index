@@ -7,11 +7,21 @@ from vie_doc_pipeline.pipeline_config import parse_source, load_config
 
 class PipelineConfigTest(unittest.TestCase):
     def test_parse_source_normalizes_optional_values(self) -> None:
-        source = parse_source({"type": "url_sequence", "range": [1, 2], "urls": ["extra.pdf"]})
+        source = parse_source({
+            "type": "url_sequence",
+            "range": [1, 2],
+            "urls": ["extra.pdf"],
+            "from_date": "1951-01-01",
+        })
 
         self.assertEqual(source.range, (1, 2))
         self.assertEqual(source.urls, ["extra.pdf"])
+        self.assertEqual(str(source.from_date), "1951-01-01")
         self.assertIsNone(source.page_url)
+
+    def test_rejects_invalid_source_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source.from_date"):
+            parse_source({"from_date": "not-a-date"})
 
     def test_rejects_incomplete_veridian_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
