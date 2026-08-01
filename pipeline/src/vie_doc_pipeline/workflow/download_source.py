@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import partial
 from itertools import islice
 from pathlib import Path
 
@@ -55,6 +54,22 @@ class DownloadContext:
     ledger_path: Path
     retry_delay: float
 
+    def download(self, asset: SourceAsset) -> DownloadOutcome:
+        """Store one asset and persist its outcome in this stage session."""
+        try:
+            blob = self.bucket.blob(asset.gcs_object)
+            if blob.exists(self.storage_client):
+                blob.reload(self.storage_client)
+                append_event(self.ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
+                return AlreadyDownloaded(asset)
+            data = self.http.fetch_bytes(asset.source_url)
+            blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
+            append_event(self.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
+            return Downloaded(asset)
+        except Exception as error:
+            record_download_failure(self.ledger_path, asset, error, self.retry_delay)
+            return DownloadFailed(asset)
+
 
 def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
     """Download discovered source assets, resuming from the ledger."""
@@ -71,8 +86,7 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
                 ledger_path=ledger_path,
                 retry_delay=config.acquisition.backoff_max_seconds,
             )
-            download = partial(download_one, context)
-            outcomes = run_downloads(assets, config.acquisition.max_workers, download)
+            outcomes = run_downloads(context, assets, config.acquisition.max_workers)
             return summarize_downloads(outcomes)
         finally:
             client.close()
@@ -86,33 +100,13 @@ def iter_download_candidates(ledger_path: Path, limit: int | None) -> Iterator[S
 
 
 def run_downloads(
+    context: DownloadContext,
     assets: Iterable[SourceAsset],
     max_workers: int,
-    download: Callable[[SourceAsset], DownloadOutcome],
 ) -> Iterator[DownloadOutcome]:
     """Apply one download function concurrently while retaining input ordering."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        yield from executor.map(download, assets)
-
-
-def download_one(
-    context: DownloadContext,
-    asset: SourceAsset,
-) -> DownloadOutcome:
-    """Store one source asset and immediately record its durable outcome."""
-    try:
-        blob = context.bucket.blob(asset.gcs_object)
-        if blob.exists(context.storage_client):
-            blob.reload(context.storage_client)
-            append_event(context.ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
-            return AlreadyDownloaded(asset)
-        data = context.http.fetch_bytes(asset.source_url)
-        blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
-        append_event(context.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
-        return Downloaded(asset)
-    except Exception as error:
-        record_download_failure(context.ledger_path, asset, error, context.retry_delay)
-        return DownloadFailed(asset)
+        yield from executor.map(context.download, assets)
 
 
 def record_download_failure(ledger_path: Path, asset: SourceAsset, error: Exception, retry_delay: float) -> None:
