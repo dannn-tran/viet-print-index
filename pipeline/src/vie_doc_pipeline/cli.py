@@ -70,9 +70,10 @@ def source_download(
     """Download discovered original source assets into GCS."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    downloaded, existing = download_source_assets(config, ledger_path, limit=limit)
-    print(f"Downloaded  : {downloaded}")
-    print(f"Already in GCS: {existing}")
+    summary = download_source_assets(config, ledger_path, limit=limit)
+    print(f"Downloaded  : {summary.downloaded}")
+    print(f"Already in GCS: {summary.already_present}")
+    print(f"Failed      : {summary.failed}")
     print(f"Ledger      : {ledger_path}")
 
 
@@ -93,9 +94,10 @@ def images_normalize(
         if bool(source_id) == bool(image_id):
             raise typer.BadParameter("--inverted requires exactly one of --source-id or --image-id")
         append_event(ledger_path, source_inverted(source_id) if source_id else image_inverted(image_id or ""))
-    images, passthrough = normalize_images(config, ledger_path, limit=limit, source_id=source_id, image_key=image_id)
-    print(f"Images created: {images}")
-    print(f"Native images : {passthrough} (registered without copying)")
+    summary = normalize_images(config, ledger_path, limit=limit, source_id=source_id, image_key=image_id)
+    print(f"Images created: {summary.created}")
+    print(f"Native images : {summary.native_registered} (registered without copying)")
+    print(f"Failed        : {summary.failed}")
     print(f"Ledger      : {ledger_path}")
 
 
@@ -148,7 +150,7 @@ def ocr_check_status(
     """Report whether submitted OCR jobs have result files in GCS."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    completed, pending = check_ocr_status(config, ledger_path)
-    print(f"Completed   : {completed} images")
-    print(f"Pending     : {pending} images")
+    summary = check_ocr_status(config, ledger_path)
+    print(f"Completed   : {summary.completed} images")
+    print(f"Pending     : {summary.pending} images")
     print(f"Ledger      : {ledger_path}")

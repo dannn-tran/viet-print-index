@@ -10,6 +10,7 @@ from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.workflow.results import OcrStatusSummary
 
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> int:
@@ -38,7 +39,7 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
     return len(assets)
 
 
-def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> tuple[int, int]:
+def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSummary:
     """Check for OCR results in GCS and return completed and pending image counts."""
     current = load_current(ledger_path)
     by_job: dict[tuple[str, str], list[str]] = {}
@@ -58,7 +59,7 @@ def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> tuple[int, in
             completed += len(asset_keys)
         else:
             pending += len(asset_keys)
-    return completed, pending
+    return OcrStatusSummary(completed, pending)
 
 
 def _parse_gs_uri(uri: str) -> tuple[str, str]:

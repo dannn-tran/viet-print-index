@@ -57,9 +57,10 @@ class AssetDiscoveryTest(unittest.TestCase):
             with patch("vie_doc_pipeline.workflow.normalize_images.storage.Client", return_value=client), \
                  patch("vie_doc_pipeline.workflow.normalize_images.check_inversion") as check:
                 check.return_value = Mock(inverted=False, needs_review=False)
-                pages, passthrough = normalize_images(config, ledger_path)
+                summary = normalize_images(config, ledger_path)
 
-            self.assertEqual((pages, passthrough), (0, 1))
+            self.assertEqual(summary.created, 0)
+            self.assertEqual(summary.native_registered, 1)
             self.assertEqual(client.bucket_instance.uploads, [])
             self.assertEqual(load_current(ledger_path)[asset.key]["event"], "image_normalized")
 

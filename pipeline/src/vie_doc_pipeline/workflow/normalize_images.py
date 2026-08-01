@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
+from dataclasses import replace
 from itertools import islice
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -19,6 +20,7 @@ from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.workflow.assets import asset_from_state
 from vie_doc_pipeline.workflow.image_processing import check_inversion, invert_image
+from vie_doc_pipeline.workflow.results import NormalizationSummary
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ def normalize_images(
     limit: int | None = None,
     source_id: str | None = None,
     image_key: str | None = None,
-) -> tuple[int, int]:
+) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
@@ -85,18 +87,18 @@ def normalize_asset(
     client: storage.Client,
     asset: SourceAsset,
     overrides: InversionOverrides,
-) -> tuple[int, int]:
+) -> NormalizationSummary:
     """Normalise one source asset and persist either its images or failure."""
     try:
         match asset:
             case ImageAsset():
-                return 0, normalize_native_image(ledger_path, bucket, asset, overrides)
+                return NormalizationSummary(native_registered=normalize_native_image(ledger_path, bucket, asset, overrides))
             case PdfAsset():
-                return normalize_pdf_asset(config, ledger_path, bucket, client, asset, overrides), 0
+                return NormalizationSummary(created=normalize_pdf_asset(config, ledger_path, bucket, client, asset, overrides))
     except Exception as error:
         append_event(ledger_path, failed(asset.key, stage="normalize", error=str(error)))
         logger.exception("Failed to normalize %s", asset.key)
-    return 0, 0
+    return NormalizationSummary(failed=1)
 
 
 def normalize_native_image(
@@ -170,13 +172,16 @@ def store_pdf_image(bucket: storage.Bucket, client: storage.Client, image: Image
     blob.upload_from_string(output, content_type=_image_content_type(image.gcs_object), timeout=600)
 
 
-def summarize_normalization(results: Iterator[tuple[int, int]]) -> tuple[int, int]:
-    """Return total (created, native-passthrough) image counts."""
-    created, passthrough = 0, 0
-    for created_count, passthrough_count in results:
-        created += created_count
-        passthrough += passthrough_count
-    return created, passthrough
+def summarize_normalization(results: Iterator[NormalizationSummary]) -> NormalizationSummary:
+    """Reduce individual normalisation outcomes into a typed stage summary."""
+    created = 0
+    native_registered = 0
+    failed = 0
+    for result in results:
+        created += result.created
+        native_registered += result.native_registered
+        failed += result.failed
+    return NormalizationSummary(created, native_registered, failed)
 
 
 def _image_content_type(filename: str) -> str:
@@ -205,7 +210,7 @@ def _normalize_bytes(asset: ImageAsset, data: bytes, filename: str, forced_inver
     check = check_inversion(data)
     inverted = forced_inverted or check.inverted
     if not inverted:
-        return ImageAsset(**{**asset.to_dict(), "needs_review": check.needs_review})  # type: ignore[arg-type]
+        return replace(asset, needs_review=check.needs_review)
     suffix = PurePosixPath(filename).suffix
     stem = PurePosixPath(filename).stem
     return ImageAsset(

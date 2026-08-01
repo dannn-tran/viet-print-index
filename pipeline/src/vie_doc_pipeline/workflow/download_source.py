@@ -21,6 +21,7 @@ from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_curr
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.workflow.assets import SourceAsset, asset_from_state
+from vie_doc_pipeline.workflow.results import DownloadSummary
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class DownloadFailed:
 DownloadOutcome = Downloaded | AlreadyDownloaded | DownloadFailed
 
 
-def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> tuple[int, int]:
+def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
     """Download discovered source assets, resuming from the ledger."""
     with acquisition_lock(ledger_path):
         storage_client = storage.Client(project=config.gcs.project)
@@ -124,18 +125,20 @@ def record_download_failure(ledger_path: Path, asset: SourceAsset, error: Except
     logger.exception("Failed to download %s", asset.key)
 
 
-def summarize_downloads(outcomes: Iterable[DownloadOutcome]) -> tuple[int, int]:
-    """Print newly stored assets and return (new, already-present) counts."""
+def summarize_downloads(outcomes: Iterable[DownloadOutcome]) -> DownloadSummary:
+    """Reduce individual download outcomes into a typed stage summary."""
     downloaded = 0
-    existing = 0
+    already_present = 0
+    failed = 0
     for outcome in outcomes:
         match outcome:
-            case Downloaded(asset):
+            case Downloaded():
                 downloaded += 1
-                print(f"Downloaded: {asset.gcs_object}")
             case AlreadyDownloaded():
-                existing += 1
-    return downloaded, existing
+                already_present += 1
+            case DownloadFailed():
+                failed += 1
+    return DownloadSummary(downloaded, already_present, failed)
 
 
 def _content_type(asset: SourceAsset) -> str:
