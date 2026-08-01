@@ -10,8 +10,8 @@ from __future__ import annotations
 import html
 import re
 import urllib.parse
-from collections.abc import Callable, Iterator
-from itertools import islice
+from collections.abc import Callable, Iterable, Iterator
+from itertools import chain, islice
 from dataclasses import dataclass
 from datetime import date
 
@@ -55,35 +55,42 @@ def iter_pages(
     assert config.catalogue_url and config.image_server_url and config.title_id
     catalogue_url = config.catalogue_url.rstrip("/")
     title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    issues = iter_catalogue_issues(config, fetch_text, catalogue_url, config.from_date, config.to_date, title_html)
-    pages = (item for issue in issues for item in iter_issue_pages(config, fetch_text, catalogue_url, issue))
+    month_htmls = (
+        fetch_text(month_url)
+        for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id)
+        if month_overlaps(year, month, config.from_date, config.to_date)
+    )
+    issues = iter_catalogue_issues(month_htmls, config.title_id, config.from_date, config.to_date)
+    issue_htmls = (
+        (issue, fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid)))
+        for issue in issues
+    )
+    pages = chain.from_iterable(
+        iter_issue_pages(config, issue, issue_html)
+        for issue, issue_html in issue_htmls
+    )
     yield from islice(pages, limit)
 
 
 def iter_catalogue_issues(
-    config: SourceConfig,
-    fetch_text: Callable[[str], str],
-    catalogue_url: str,
+    month_htmls: Iterable[str],
+    title_id: str,
     from_date: date | None,
     to_date: date | None,
-    title_html: str,
 ) -> Iterator[Issue]:
-    """Yield catalogue issues that fall within the configured date range."""
-    for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id or ""):
-        if month_overlaps(year, month, from_date, to_date):
-            issues = issues_from_month_html(fetch_text(month_url), config.title_id or "")
-            yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), sorted(issues, key=lambda issue: issue.published_on))
+    """Yield in-range issues parsed from the supplied monthly catalogue HTML."""
+    for month_html in month_htmls:
+        issues = sorted(issues_from_month_html(month_html, title_id), key=lambda issue: issue.published_on)
+        yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), issues)
 
 
 def iter_issue_pages(
     config: SourceConfig,
-    fetch_text: Callable[[str], str],
-    catalogue_url: str,
     issue: Issue,
+    issue_html: str,
 ) -> Iterator[DiscoveredSourceItem]:
-    """Yield the native full-page images for one Veridian issue."""
+    """Yield native full-page images parsed from one already-fetched viewer page."""
     assert config.image_server_url
-    issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
     for page in parse_pages(issue_html, issue.oid):
         yield DiscoveredSourceItem(
             kind="image",
