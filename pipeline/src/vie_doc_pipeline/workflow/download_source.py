@@ -21,7 +21,7 @@ from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_curr
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.workflow.assets import SourceAsset
-from vie_doc_pipeline.workflow.results import DownloadSummary
+from vie_doc_pipeline.domain.results import DownloadSummary
 
 logger = logging.getLogger(__name__)
 

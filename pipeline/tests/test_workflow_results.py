@@ -7,7 +7,7 @@ from vie_doc_pipeline.models import PdfAsset
 from vie_doc_pipeline.sources.http import SourceHttpError, TransientSourceError
 from vie_doc_pipeline.workflow.download_source import AlreadyDownloaded, DownloadFailed, Downloaded, _failure_details, summarize_downloads
 from vie_doc_pipeline.workflow.normalize_images import summarize_normalization
-from vie_doc_pipeline.workflow.results import NormalizationSummary
+from vie_doc_pipeline.domain.results import NormalizationSummary
 from vie_doc_pipeline.workflow.normalize_images import AllNormalizationCandidates, ImageNormalizationCandidates, SourceNormalizationCandidates
 
 

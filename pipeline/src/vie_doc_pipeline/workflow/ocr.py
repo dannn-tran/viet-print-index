@@ -10,7 +10,7 @@ from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.workflow.results import OcrStatusSummary
+from vie_doc_pipeline.domain.results import OcrStatusSummary
 
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> int:

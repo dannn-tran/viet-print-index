@@ -19,7 +19,7 @@ from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_cur
 from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
-from vie_doc_pipeline.workflow.results import NormalizationSummary
+from vie_doc_pipeline.domain.results import NormalizationSummary
 
 logger = logging.getLogger(__name__)
 
