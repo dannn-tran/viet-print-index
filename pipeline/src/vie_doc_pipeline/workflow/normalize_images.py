@@ -12,13 +12,13 @@ from pathlib import PurePosixPath
 
 from google.cloud import storage
 
-from vie_doc_pipeline.explode_mem import explode_pdf_bytes
+from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.workflow.image_processing import check_inversion, invert_image
+from vie_doc_pipeline.images.processing import check_inversion, invert_image
 from vie_doc_pipeline.workflow.results import NormalizationSummary
 
 logger = logging.getLogger(__name__)

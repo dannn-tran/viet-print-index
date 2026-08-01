@@ -2,7 +2,7 @@ import unittest
 
 import fitz
 
-from vie_doc_pipeline.workflow.image_processing import check_inversion, invert_image
+from vie_doc_pipeline.images.processing import check_inversion, invert_image
 
 
 def _png(value: int) -> bytes:

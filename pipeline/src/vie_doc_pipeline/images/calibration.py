@@ -4,7 +4,7 @@ from pathlib import Path
 
 import fitz
 
-from vie_doc_pipeline.explode_mem import ExplodeParams, explode_pdf_bytes
+from vie_doc_pipeline.images.pdf import ExplodeParams, explode_pdf_bytes
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 
 _VARIANTS: list[tuple[str, ExplodeParams]] = [

@@ -13,7 +13,7 @@ from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import load_config
-from vie_doc_pipeline.workflow.calibrate_images import run_image_calibration
+from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.download_source import download_source_assets
 from vie_doc_pipeline.workflow.normalize_images import normalize_images

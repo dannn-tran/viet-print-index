@@ -9,7 +9,7 @@ from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.explode_mem import ExplodeParams
+from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.pipeline_config import (
     GcsConfig,
     OcrConfig,

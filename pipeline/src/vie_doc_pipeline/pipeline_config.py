@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Literal, TypeAlias
 
-from vie_doc_pipeline.explode_mem import ExplodeParams
+from vie_doc_pipeline.images.pdf import ExplodeParams
 
 
 @dataclass(frozen=True)
