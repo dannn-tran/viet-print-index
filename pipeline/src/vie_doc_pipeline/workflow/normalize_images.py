@@ -92,7 +92,7 @@ def iter_normalization_candidates(
     """Yield source assets selected for normalisation or explicit reprocessing."""
     match selection:
         case AllNormalizationCandidates():
-            candidates = (state.asset for state in assets_at(current, "source_downloaded") if state.asset is not None)
+            candidates = (state.asset for state in assets_at(current, "source_fetched") if state.asset is not None)
         case SourceNormalizationCandidates():
             candidates = (asset for _, asset in iter_reprocessable_assets(current) if _source_id(asset) == selection.source_id)
         case ImageNormalizationCandidates():
@@ -101,9 +101,9 @@ def iter_normalization_candidates(
 
 
 def iter_reprocessable_assets(current: CurrentState) -> Iterator[tuple[str, SourceAsset]]:
-    """Yield explicitly selected assets without repeatedly decoding ledger data."""
+    """Yield explicitly selected assets without repeatedly decoding event data."""
     for key, state in tuple(current.items()):
-        if state.asset is None or state.event not in {"source_downloaded", "image_normalized"}:
+        if state.asset is None or state.event not in {"source_fetched", "image_normalized"}:
             continue
         yield key, state.asset
 

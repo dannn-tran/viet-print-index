@@ -31,7 +31,8 @@ The Python package keeps the workflow boundaries visible: `config.py` decodes
 TOML into typed values, `assets.py` owns the cross-stage asset contract,
 `sources/` owns source discovery contracts, factories, and HTTP adapters,
 `images/` owns PDF/image transformations and calibration contracts,
-`ledger/` owns event contracts, JSONL persistence, and projection, and
+`ledger/` contains the event-store implementation, event contracts, and
+application-state projection, and
 `workflow/` owns the staged orchestration and its result contracts. External
 clients are created and closed by the stage or provider that owns their lifetime.
 
@@ -62,9 +63,9 @@ cd ../search && mill __.compile   # compile Scala
 
 ## Publications
 
-Each publication has a config file in `sources/<id>.toml`. Current publications:
+Each pipeline configuration has a file in `sources/<id>.toml`. Current configurations:
 
-| ID | Name |
+| Config ID | Publication |
 |----|------|
 | `thanh-nghi` | Thanh Nghi |
 | `doi-moi` | Doi Moi |
@@ -75,9 +76,9 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 | `nam-phong-tap-chi` | Nam Phong Tap Chi |
 | `nlv-cuu-quoc` | Cứu Quốc (National Library of Vietnam) |
 
-### Adding a new publication
+### Adding a new pipeline configuration
 
-1. Create `sources/<id>.toml` (copy an existing one as template)
+1. Create `sources/<id>.toml` (copy an existing one as a template)
 2. Calibrate PDF extraction: `vie-pipeline images calibrate <id> --pdf <sample.pdf>`
 3. Review `calibrate/<id>/` variants, update `[explode]` section in TOML
 4. Run the pipeline (see below)
@@ -86,43 +87,50 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 
 ## Pipeline
 
-All commands run from the repo root. Replace `<pub-id>` with a publication ID from the table above.
+All commands run from the repo root. Replace `<config-path>` with an exact TOML path such as `sources/nlv-cuu-quoc.toml`.
 
 ### Preferred staged workflow
 
 All source types use the same resumable workflow, backed by an append-only
-JSONL ledger at `.pipeline-state/v2/<pub>.jsonl`:
+JSONL event store at `.pipeline-state/v2/<config-name>.jsonl` by default:
 
 ```sh
-vie-pipeline source discover <pub-id>  # enumerate original source records
-vie-pipeline source fetch <pub-id>     # fetch originals into target storage
-vie-pipeline images normalize <pub-id> # create presentation/OCR image assets
-vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
-vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
+vie-pipeline source discover <config-path>  # enumerate original source records
+vie-pipeline source fetch <config-path>     # fetch originals into target storage
+vie-pipeline images normalize <config-path> # create presentation/OCR image assets
+vie-pipeline ocr submit-jobs <config-path>  # start asynchronous OCR jobs
+vie-pipeline ocr check-status <config-path> # report completed/pending OCR output
 ```
 
 ### Workflow contracts
 
 - Source adapters only enumerate source items. They do not apply CLI batch
-  limits, write the ledger, or create target objects.
+  limits, write the event store, or create target objects.
 - Each workflow stage applies `--limit` once, immediately after selecting its
   candidate assets and before performing external work.
 - TOML is decoded into a validated source variant before discovery. A Veridian
   source, a PDF index page, a URL sequence, a URL list, and a local directory
   therefore cannot be confused at runtime.
-- JSONL is the durable, human-inspectable event format; Python projects it into
-  typed in-memory asset state for workflow decisions.
-- The first JSONL record stores the SHA-256 of the exact TOML bytes used for the
-  run. Loading a ledger with a different TOML fails before work begins, so
-  configuration changes cannot silently mix states.
-- The ledger stores this fingerprint, not a copy of the full TOML; retain the
-  versioned source config when you need to reconstruct historical settings.
+- The event store is the durable, human-inspectable event history; Python
+  replays it into typed in-memory application state for workflow decisions.
+- The first event records the exact TOML snapshot and its SHA-256. A different
+  configuration cannot silently mix state, and historical settings remain
+  reconstructible even if the source TOML later changes.
+- Appends are fsynced. If a process is interrupted during the final JSONL
+  record, the next replay removes only that incomplete tail and replays the
+  preceding complete history.
+- Discovery, source fetch, and image normalization are restart-safe through
+  durable target inspection and event replay. OCR submission is at-least-once:
+  a crash after Google accepts a job but before its event is recorded can cause
+  a duplicate submission, so check existing OCR output before manually retrying.
 - Workflows return typed summaries. The CLI alone prints human-facing output.
+- Pass `--state-path` when a run should use a state file outside the default
+  `.pipeline-state/v2/<config-name>.jsonl` location.
 
 ### Source request policy
 
 HTTP requests are generic across source adapters. Configure bounded
-concurrency, source-wide pacing, and bounded retries per publication:
+concurrency, source-wide pacing, and bounded retries per configuration:
 
 ```toml
 [source_requests]
@@ -138,9 +146,9 @@ The interval applies to every initial request and retry across worker
 threads. Temporary network failures and HTTP `429`, `500`, `502`, `503`, and
 `504` retry with backoff and respect `Retry-After`; other HTTP 4xx responses
 are recorded as permanent failures. Each completed fetch is immediately
-written to the ledger. Re-running `source fetch` resumes eligible work,
+written to the event store. Re-running `source fetch` resumes eligible work,
 skips target objects already present, and leaves permanent failures untouched.
-Only one source-fetch command may run for a publication at once.
+Only one source-fetch command may run for a configuration at once.
 
 ### Target storage
 
@@ -171,9 +179,9 @@ images are retained unchanged and listed by `images review`; use `--inverted`
 for an issue/PDF or a specific image when correction is needed:
 
 ```sh
-vie-pipeline images review <pub-id>
-vie-pipeline images normalize <pub-id> --source-id <issue-or-pdf-id> --inverted
-vie-pipeline images normalize <pub-id> --image-id <ledger-image-key> --inverted
+vie-pipeline images review <config-path>
+vie-pipeline images normalize <config-path> --source-id <issue-or-pdf-id> --inverted
+vie-pipeline images normalize <config-path> --image-id <event-store-image-key> --inverted
 ```
 
 ### Index OCR → SQLite
@@ -185,13 +193,13 @@ Streams OCR JSON blobs from GCS into a local SQLite FTS5 database. Resumable: in
 mill cli.run index gcs \
   --db ../data/index.db \
   --bucket vie-doc \
-  --prefix <pub-id>/ocr/
+  --prefix <config-name>/ocr/
 ```
 
 ### Check status at any stage
 
 ```sh
-vie-pipeline status <pub-id>
+vie-pipeline status <config-path>
 ```
 
 ### National Library of Vietnam / Veridian sources
@@ -202,28 +210,28 @@ workflow as every other source. A native full-page JPEG that does not need
 normalization is registered in place, without a duplicate target object.
 
 ```sh
-# Discover full-page source assets into an inspectable v2 ledger
-vie-pipeline source discover nlv-cuu-quoc --limit 10
+# Discover full-page source assets into an inspectable event store
+vie-pipeline source discover sources/nlv-cuu-quoc.toml --limit 10
 
 # Fetch only discovered-but-not-yet-fetched originals.
-vie-pipeline source fetch nlv-cuu-quoc --limit 10
+vie-pipeline source fetch sources/nlv-cuu-quoc.toml --limit 10
 
 # Inspect and register native images for presentation and OCR.
-vie-pipeline images normalize nlv-cuu-quoc
+vie-pipeline images normalize sources/nlv-cuu-quoc.toml
 
 # Submit quickly, then check later. Neither command waits for long OCR work.
-vie-pipeline ocr submit-jobs nlv-cuu-quoc
-vie-pipeline ocr check-status nlv-cuu-quoc
+vie-pipeline ocr submit-jobs sources/nlv-cuu-quoc.toml
+vie-pipeline ocr check-status sources/nlv-cuu-quoc.toml
 
 # Inspect projected lifecycle and image-review state.
-vie-pipeline status nlv-cuu-quoc
+vie-pipeline status sources/nlv-cuu-quoc.toml
 ```
 
 The source config must provide `type = "veridian"`, `catalogue_url`,
 `image_server_url`, the NLV `title_id`, and an inclusive `from_date`/`to_date`.
 `source discover` requests Veridian's complete issue catalogue (`ai=1`), filters
 the direct issue links to the configured date range, records each source image in
-`.pipeline-state/v2/<pub>.jsonl`, and
+`.pipeline-state/v2/<config-name>.jsonl`, and
 `source fetch` requests each complete page as one JPEG. Review collection terms and
 retain a conservative request delay before widening a run.
 
@@ -232,10 +240,10 @@ retain a conservative request delay before widening a run.
 Before normalizing a PDF collection, inspect image derivation variants:
 
 ```sh
-vie-pipeline images calibrate <pub-id> --pdf <path/to/sample.pdf>
+vie-pipeline images calibrate <config-path> --pdf <path/to/sample.pdf>
 ```
 
-Outputs 5 image variants to `calibrate/<pub-id>/<stem>/`:
+Outputs 5 image variants to `calibrate/<config-name>/<stem>/`:
 
 | Variant | Description |
 |---------|-------------|

@@ -38,8 +38,9 @@ class PipelineConfigTest(unittest.TestCase):
         )
 
     def test_loaded_config_carries_exact_toml_fingerprint(self) -> None:
-        config = load_config("nlv-cuu-quoc", "sources")
-        toml_bytes = Path("sources/nlv-cuu-quoc.toml").read_bytes()
+        config_path = Path("sources/nlv-cuu-quoc.toml")
+        config = load_config(config_path)
+        toml_bytes = config_path.read_bytes()
 
         self.assertEqual(config.config_sha256, hashlib.sha256(toml_bytes).hexdigest())
         self.assertIsNotNone(config.config_snapshot)
@@ -85,4 +86,4 @@ image_server_url = "https://example.test/images"
 title_id = "WNyf"
 """, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "from_date"):
-                load_config("example", directory)
+                load_config(Path(directory) / "example.toml")

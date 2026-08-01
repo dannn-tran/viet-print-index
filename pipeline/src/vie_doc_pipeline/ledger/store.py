@@ -1,4 +1,4 @@
-"""Path-bound event-store interface for the append-only ledger."""
+"""Path-bound event-store interface for append-only event records."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from vie_doc_pipeline.ledger.events import LedgerEvent
+from vie_doc_pipeline.ledger.events import EventRecord
 from vie_doc_pipeline.ledger.jsonl import _append_event, _read_events
 from vie_doc_pipeline.ledger.locking import advisory_file_lock
 
@@ -28,11 +28,11 @@ class EventStore:
         """Bind an event store to one append-only event file."""
         return cls(path)
 
-    def read_events(self) -> Iterator[LedgerEvent]:
+    def read_events(self) -> Iterator[EventRecord]:
         """Stream events in their persisted order."""
         yield from _read_events(self._path)
 
-    def append(self, event: LedgerEvent) -> None:
+    def append(self, event: EventRecord) -> None:
         """Append one event atomically with the store's file lock."""
         _append_event(self._path, event)
 
@@ -48,7 +48,7 @@ class EventStore:
                 start = content.rfind(b"\n") + 1
                 try:
                     event = json.loads(content[start:].decode("utf-8"))
-                    LedgerEvent.from_dict(event)
+                    EventRecord.from_dict(event)
                 except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                     handle.truncate(start)
                     handle.flush()

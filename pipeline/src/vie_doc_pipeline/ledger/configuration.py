@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from vie_doc_pipeline.config import ConfigSnapshot
-from vie_doc_pipeline.ledger.events import LedgerEvent, ledger_initialized
+from vie_doc_pipeline.ledger.events import EventRecord, configuration_bound
 from vie_doc_pipeline.ledger.store import EventStore
 
 
@@ -37,7 +37,7 @@ def ensure_config_compatible(event_store: EventStore, snapshot: ConfigSnapshot |
             raise ConfigMismatchError(
                 "Event store has no configuration snapshot; refusing to mix it with the current configuration"
             )
-        event_store.append(ledger_initialized(snapshot.sha256, snapshot.toml))
+        event_store.append(configuration_bound(snapshot.sha256, snapshot.toml))
         return
 
     expected = (snapshot.sha256, snapshot.toml)
@@ -47,8 +47,8 @@ def ensure_config_compatible(event_store: EventStore, snapshot: ConfigSnapshot |
         )
 
 
-def _config_record(event: LedgerEvent) -> tuple[str, str] | None:
-    if event.event != "ledger_initialized":
+def _config_record(event: EventRecord) -> tuple[str, str] | None:
+    if event.event != "configuration_bound":
         return None
     sha256 = event.data.get("config_sha256")
     snapshot = event.data.get("config_snapshot")

@@ -22,7 +22,7 @@ class EventStoreConfigTest(unittest.TestCase):
             ensure_config_compatible(store, snapshot)
 
             events = list(store.read_events())
-            self.assertEqual(events[0].event, "ledger_initialized")
+            self.assertEqual(events[0].event, "configuration_bound")
             self.assertEqual(events[0].data["config_snapshot"], "config-a")
             self.assertEqual(len(events), 1)
             with self.assertRaises(ConfigMismatchError):
@@ -103,7 +103,7 @@ class EventStoreConfigTest(unittest.TestCase):
             path = Path(temporary_directory) / "state.jsonl"
             path.write_text('{"event":"future_event","asset_key":"asset","at":"now","data":{}}\n', encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "Invalid ledger event"):
+            with self.assertRaisesRegex(ValueError, "Invalid event record"):
                 list(EventStore.open(path).read_events())
 
 

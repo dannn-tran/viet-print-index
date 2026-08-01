@@ -49,8 +49,8 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
         asset = ImageAsset("cuu-quoc", "issue-001", "001", "https://example.test/001.jpg", "cuu-quoc/images/issue-001/001.jpg")
         with TemporaryDirectory() as directory:
-            ledger_path = Path(directory) / "state.jsonl"
-            event_store = EventStore.open(ledger_path)
+            state_path = Path(directory) / "state.jsonl"
+            event_store = EventStore.open(state_path)
             event_store.append(source_discovered(asset))
             event_store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
             store = _FakeTargetStore()
@@ -80,7 +80,7 @@ class AssetDiscoveryTest(unittest.TestCase):
 
         self.assertEqual(asset.target_path, "cuu-quoc/images/1945-09-05_WNyf19450905/001.jpg")
 
-    def test_discovery_does_not_overwrite_existing_ledger_state(self) -> None:
+    def test_discovery_does_not_overwrite_existing_event_state(self) -> None:
         config = PipelineConfig(
             publication=PublicationConfig(id="doi-moi", name="Đời Mới"),
             target=GcsTarget("project", "bucket", "doi-moi/pdf", "doi-moi/images", "doi-moi/ocr"),
@@ -89,8 +89,8 @@ class AssetDiscoveryTest(unittest.TestCase):
             ocr=OcrConfig(),
         )
         with TemporaryDirectory() as directory:
-            ledger_path = Path(directory) / "state.jsonl"
-            store = EventStore.open(ledger_path)
+            state_path = Path(directory) / "state.jsonl"
+            store = EventStore.open(state_path)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
@@ -112,8 +112,8 @@ class AssetDiscoveryTest(unittest.TestCase):
             Mock(kind="pdf", source_url="https://example.test/002.pdf"),
         ]
         with TemporaryDirectory() as directory:
-            ledger_path = Path(directory) / "state.jsonl"
-            store = EventStore.open(ledger_path)
+            state_path = Path(directory) / "state.jsonl"
+            store = EventStore.open(state_path)
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),

@@ -1,11 +1,11 @@
-"""Pure projection and selection helpers over ledger history."""
+"""Current application state and projection helpers over event history."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import time
 
-from vie_doc_pipeline.ledger.events import LedgerEvent
+from vie_doc_pipeline.ledger.events import EventRecord
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import SourceAsset, source_asset_from_dict
 
@@ -51,15 +51,15 @@ class AppState:
             current = apply_event(current, event)
         return cls(event_store, current)
 
-    def record(self, event: LedgerEvent) -> None:
+    def record(self, event: EventRecord) -> None:
         """Append an event, then apply it to the live projection."""
         self.event_store.append(event)
         self.current = apply_event(self.current, event)
 
 
-def apply_event(states: CurrentState, event: LedgerEvent) -> CurrentState:
+def apply_event(states: CurrentState, event: EventRecord) -> CurrentState:
     """Apply one event to a mutable projection and return that projection."""
-    if event.event == "ledger_initialized":
+    if event.event == "configuration_bound":
         return states
     state = states.setdefault(event.asset_key, CurrentAssetState())
     if event.event == "failed":
@@ -103,12 +103,12 @@ def eligible_source_assets(current: CurrentState, now: float | None = None) -> l
     return eligible
 
 
-def _event_asset(event: LedgerEvent) -> SourceAsset | None:
+def _event_asset(event: EventRecord) -> SourceAsset | None:
     asset = event.data.get("asset")
     return source_asset_from_dict(asset) if isinstance(asset, dict) else None
 
 
-def _failure_from_event(event: LedgerEvent) -> FailureState:
+def _failure_from_event(event: EventRecord) -> FailureState:
     return FailureState(
         at=event.at,
         stage=_string_data(event, "stage") or "unknown",
@@ -119,11 +119,11 @@ def _failure_from_event(event: LedgerEvent) -> FailureState:
     )
 
 
-def _string_data(event: LedgerEvent, field: str) -> str | None:
+def _string_data(event: EventRecord, field: str) -> str | None:
     value = event.data.get(field)
     return str(value) if value is not None else None
 
 
-def _tuple_data(event: LedgerEvent, field: str) -> tuple[str, ...]:
+def _tuple_data(event: EventRecord, field: str) -> tuple[str, ...]:
     value = event.data.get(field)
     return tuple(str(item) for item in value) if isinstance(value, list) else ()

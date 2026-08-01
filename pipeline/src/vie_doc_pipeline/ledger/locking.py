@@ -26,8 +26,8 @@ def source_fetch_lock(event_store: "EventStore") -> Iterator[None]:
 
 
 @contextmanager
-def ledger_write_lock(path: Path) -> Iterator[None]:
-    """Hold the advisory lock used while appending one ledger event."""
+def event_store_write_lock(path: Path) -> Iterator[None]:
+    """Hold the advisory lock used while appending one event record."""
     with advisory_file_lock(path):
         yield
 

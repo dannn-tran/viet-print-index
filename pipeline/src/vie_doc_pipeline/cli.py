@@ -9,7 +9,7 @@ import typer
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
-from vie_doc_pipeline.ledger.paths import default_ledger_path
+from vie_doc_pipeline.ledger.paths import resolve_state_path
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
@@ -35,22 +35,20 @@ app.add_typer(source_app, name="source")
 app.add_typer(images_app, name="images")
 app.add_typer(ocr_app, name="ocr")
 
-_PubArg = Annotated[str, typer.Argument(help="Publication ID (matches sources/<id>.toml)")]
-_ConfigDir = Annotated[str, typer.Option(help="Directory containing source TOML configs")]
+_ConfigPath = Annotated[Path, typer.Argument(help="Pipeline TOML configuration path")]
 _Limit = Annotated[Optional[int], typer.Option(help="Process only first N items")]
-_StateDir = Annotated[Path, typer.Option(help="Directory for inspectable JSONL state ledgers")]
+_StatePath = Annotated[Optional[Path], typer.Option("--state-path", help="Event-store state path")]
 
 
 @app.command()
 def status(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-    state_dir: _StateDir = Path(".pipeline-state"),
+    config_path: _ConfigPath,
+    state_path: _StatePath = None,
 ) -> None:
     """Summarise current workflow lifecycle and review states."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     current = AppState.replay(event_store).current
     counts = Counter(item.event or "untracked" for item in current.values())
@@ -63,54 +61,51 @@ def status(
 
 @source_app.command("discover")
 def source_discover(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
+    config_path: _ConfigPath,
     limit: _Limit = None,
-    state_dir: _StateDir = Path(".pipeline-state"),
+    state_path: _StatePath = None,
 ) -> None:
-    """Discover external source records into the JSONL ledger."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    """Discover external source records into the event store."""
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     assets = discover_source_assets(config, event_store, limit=limit)
     print(f"Discovered  : {len(assets)}")
-    print(f"Ledger      : {ledger_path}")
+    print(f"State file  : {state_path}")
 
 
 @source_app.command("fetch")
 def source_fetch(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
+    config_path: _ConfigPath,
     limit: _Limit = None,
-    state_dir: _StateDir = Path(".pipeline-state"),
+    state_path: _StatePath = None,
 ) -> None:
     """Fetch discovered original source assets into target storage."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = fetch_source_assets(config, event_store, limit=limit)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
-    print(f"Ledger      : {ledger_path}")
+    print(f"State file  : {state_path}")
 
 
 @images_app.command("normalize")
 def images_normalize(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
+    config_path: _ConfigPath,
     limit: _Limit = None,
-    state_dir: _StateDir = Path(".pipeline-state"),
+    state_path: _StatePath = None,
     source_id: Annotated[Optional[str], typer.Option(help="Issue or PDF identifier to normalize")] = None,
-    image_id: Annotated[Optional[str], typer.Option(help="Ledger image asset key to normalize")] = None,
+    image_id: Annotated[Optional[str], typer.Option(help="Event-store image asset key to normalize")] = None,
     inverted: Annotated[bool, typer.Option(help="Invert this source or image before OCR and presentation")] = False,
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     state = AppState.replay(event_store)
     selection = normalization_selection(source_id, image_id)
@@ -126,7 +121,7 @@ def images_normalize(
     print(f"Images created: {summary.created}")
     print(f"Native images : {summary.native_registered} (registered without copying)")
     print(f"Failed        : {summary.failed}")
-    print(f"Ledger      : {ledger_path}")
+    print(f"State file  : {state_path}")
 
 
 def normalization_selection(source_id: str | None, image_id: str | None) -> NormalizationSelection:
@@ -141,14 +136,13 @@ def normalization_selection(source_id: str | None, image_id: str | None) -> Norm
 
 @images_app.command("review")
 def images_review(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-    state_dir: _StateDir = Path(".pipeline-state"),
+    config_path: _ConfigPath,
+    state_path: _StatePath = None,
 ) -> None:
     """List normalized images that were retained unchanged for manual review."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     current = AppState.replay(event_store).current
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
@@ -157,18 +151,17 @@ def images_review(
         return
     for key, item in flagged:
         source_id = item.asset.issue_id if isinstance(item.asset, ImageAsset) else ""
-        print(f"{key}\n  vie-pipeline images normalize {pub_id} --source-id {source_id} --inverted")
+        print(f"{key}\n  vie-pipeline images normalize {config_path} --source-id {source_id} --inverted")
 
 
 @images_app.command("calibrate")
 def images_calibrate(
-    pub_id: _PubArg,
+    config_path: _ConfigPath,
     pdf: Annotated[Path, typer.Option(help="PDF file to use for calibration")],
-    config_dir: _ConfigDir = "sources",
     out_dir: Annotated[Optional[Path], typer.Option(help="Output directory")] = None,
 ) -> None:
     """Inspect PDF-to-image variants for a representative source asset."""
-    summary = run_image_calibration(load_config(pub_id, config_dir), pdf, out_dir)
+    summary = run_image_calibration(load_config(config_path), pdf, out_dir)
     for variant in summary.variants:
         print(f"  {variant.name}: {variant.image_count} images → {variant.output_dir}")
     print("\nHeuristic suggestions for [explode] in your TOML:" if summary.hints else "\nNo heuristic hints. Try render variants.")
@@ -178,33 +171,31 @@ def images_calibrate(
 
 @ocr_app.command("submit-jobs")
 def ocr_submit_jobs(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
+    config_path: _ConfigPath,
     limit: _Limit = None,
-    state_dir: _StateDir = Path(".pipeline-state"),
+    state_path: _StatePath = None,
 ) -> None:
     """Submit OCR jobs for normalized image assets without waiting."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = submit_ocr_jobs(config, event_store, limit=limit)
     print(f"Submitted   : {summary.submitted} images")
-    print(f"Ledger      : {ledger_path}")
+    print(f"State file  : {state_path}")
 
 
 @ocr_app.command("check-status")
 def ocr_check_status(
-    pub_id: _PubArg,
-    config_dir: _ConfigDir = "sources",
-    state_dir: _StateDir = Path(".pipeline-state"),
+    config_path: _ConfigPath,
+    state_path: _StatePath = None,
 ) -> None:
     """Report whether submitted OCR jobs have result files in GCS."""
-    config = load_config(pub_id, config_dir)
-    ledger_path = default_ledger_path(pub_id, state_dir)
-    event_store = EventStore.open(ledger_path)
+    config = load_config(config_path)
+    state_path = resolve_state_path(config_path, state_path)
+    event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = check_ocr_status(config, event_store)
     print(f"Completed   : {summary.completed} images")
     print(f"Pending     : {summary.pending} images")
-    print(f"Ledger      : {ledger_path}")
+    print(f"State file  : {state_path}")

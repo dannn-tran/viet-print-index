@@ -120,10 +120,10 @@ class PipelineConfig:
         return self.config_snapshot.sha256 if self.config_snapshot is not None else None
 
 
-def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
-    path = Path(config_dir) / f"{pub_id}.toml"
+def load_config(config_path: str | Path) -> PipelineConfig:
+    path = Path(config_path)
     if not path.exists():
-        raise FileNotFoundError(f"No config found for '{pub_id}' at {path}")
+        raise FileNotFoundError(f"No config found at {path}")
     raw_bytes = path.read_bytes()
     raw = tomllib.loads(raw_bytes.decode("utf-8"))
 

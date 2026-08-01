@@ -1,1 +1,1 @@
-"""Inspectable, append-only JSONL ledger for resumable pipeline work."""
+"""Inspectable, append-only event-store primitives for resumable work."""
