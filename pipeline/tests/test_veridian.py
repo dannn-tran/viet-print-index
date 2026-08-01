@@ -3,7 +3,7 @@ from itertools import islice
 import unittest
 
 from vie_doc_pipeline.pipeline_config import VeridianSource
-from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian, issues_from_catalogue_html, page_image_url, parse_pages
+from vie_doc_pipeline.sources.veridian import Issue, iter_source_items_from_veridian, issues_from_catalogue_html, page_image_url, parse_pages
 
 
 class VeridianParsingTest(unittest.TestCase):
@@ -19,9 +19,14 @@ class VeridianParsingTest(unittest.TestCase):
         self.assertEqual((pages[0].width, pages[0].height), (1890, 2602))
 
     def test_parses_issue_links_from_complete_catalogue(self) -> None:
-        catalogue_html = '<a href="?a=d&amp;d=WNyf19510101&amp;e=x">1 Tháng Một</a>'
+        catalogue_html = """
+        <a href="?a=d&amp;d=WNyf19510101&amp;e=x">1 Tháng Một</a>
+        <a href="?a=d&amp;d=WNyf19510101&amp;e=x">duplicate</a>
+        <a href="?a=d&amp;d=Other19510101&amp;e=x">other title</a>
+        <a href="?a=d&amp;d=WNyf19511301&amp;e=x">invalid date</a>
+        """
         issues = issues_from_catalogue_html(catalogue_html, "WNyf")
-        self.assertEqual(issues[0].published_on, date(1951, 1, 1))
+        self.assertEqual(issues, [Issue("WNyf19510101", date(1951, 1, 1))])
 
     def test_full_page_url_uses_native_crop(self) -> None:
         page = parse_pages("var documentOID = 'WNyf19510101'; var pageImageSizes = { '1.1':{'w':1890,'h':2602} };", "WNyf19510101")[0]
