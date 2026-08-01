@@ -44,6 +44,17 @@ class DownloadFailed:
 DownloadOutcome = Downloaded | AlreadyDownloaded | DownloadFailed
 
 
+@dataclass(frozen=True)
+class DownloadContext:
+    """External capabilities and policy fixed for one download-stage run."""
+
+    bucket: storage.Bucket
+    storage_client: storage.Client
+    http: HttpClient
+    ledger_path: Path
+    retry_delay: float
+
+
 def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
     """Download discovered source assets, resuming from the ledger."""
     with acquisition_lock(ledger_path):
@@ -52,14 +63,14 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
         assets = iter_download_candidates(ledger_path, limit)
         client = http_client(config.acquisition)
         try:
-            download = partial(
-                download_one,
+            context = DownloadContext(
                 bucket=bucket,
                 storage_client=storage_client,
-                client=client,
+                http=client,
                 ledger_path=ledger_path,
                 retry_delay=config.acquisition.backoff_max_seconds,
             )
+            download = partial(download_one, context)
             outcomes = run_downloads(assets, config.acquisition.max_workers, download)
             return summarize_downloads(outcomes)
         finally:
@@ -84,27 +95,22 @@ def run_downloads(
 
 
 def download_one(
+    context: DownloadContext,
     asset: SourceAsset,
-    *,
-    bucket: storage.Bucket,
-    storage_client: storage.Client,
-    client: HttpClient,
-    ledger_path: Path,
-    retry_delay: float,
 ) -> DownloadOutcome:
     """Store one source asset and immediately record its durable outcome."""
     try:
-        blob = bucket.blob(asset.gcs_object)
-        if blob.exists(storage_client):
-            blob.reload(storage_client)
-            append_event(ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
+        blob = context.bucket.blob(asset.gcs_object)
+        if blob.exists(context.storage_client):
+            blob.reload(context.storage_client)
+            append_event(context.ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
             return AlreadyDownloaded(asset)
-        data = client.fetch_bytes(asset.source_url)
+        data = context.http.fetch_bytes(asset.source_url)
         blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
-        append_event(ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
+        append_event(context.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
         return Downloaded(asset)
     except Exception as error:
-        record_download_failure(ledger_path, asset, error, retry_delay)
+        record_download_failure(context.ledger_path, asset, error, context.retry_delay)
         return DownloadFailed(asset)
 
 

@@ -31,6 +31,17 @@ class InversionOverrides:
     image_keys: frozenset[str]
 
 
+@dataclass(frozen=True)
+class NormalizationContext:
+    """External capabilities and fixed inputs for one normalisation-stage run."""
+
+    config: PipelineConfig
+    ledger_path: Path
+    bucket: storage.Bucket
+    storage_client: storage.Client
+    overrides: InversionOverrides
+
+
 def normalize_images(
     config: PipelineConfig,
     ledger_path: Path,
@@ -44,10 +55,8 @@ def normalize_images(
     current = load_current(ledger_path)
     overrides = load_inversion_overrides(ledger_path)
     assets = iter_normalization_candidates(current, source_id, image_key, limit)
-    results = (
-        normalize_asset(config, ledger_path, bucket, client, asset, overrides)
-        for asset in assets
-    )
+    context = NormalizationContext(config, ledger_path, bucket, client, overrides)
+    results = (normalize_asset(context, asset) for asset in assets)
     return summarize_normalization(results)
 
 
@@ -81,61 +90,51 @@ def iter_selected_assets(
 
 
 def normalize_asset(
-    config: PipelineConfig,
-    ledger_path: Path,
-    bucket: storage.Bucket,
-    client: storage.Client,
+    context: NormalizationContext,
     asset: SourceAsset,
-    overrides: InversionOverrides,
 ) -> NormalizationSummary:
     """Normalise one source asset and persist either its images or failure."""
     try:
         match asset:
             case ImageAsset():
-                return NormalizationSummary(native_registered=normalize_native_image(ledger_path, bucket, asset, overrides))
+                return NormalizationSummary(native_registered=normalize_native_image(context, asset))
             case PdfAsset():
-                return NormalizationSummary(created=normalize_pdf_asset(config, ledger_path, bucket, client, asset, overrides))
+                return NormalizationSummary(created=normalize_pdf_asset(context, asset))
     except Exception as error:
-        append_event(ledger_path, failed(asset.key, stage="normalize", error=str(error)))
+        append_event(context.ledger_path, failed(asset.key, stage="normalize", error=str(error)))
         logger.exception("Failed to normalize %s", asset.key)
     return NormalizationSummary(failed=1)
 
 
 def normalize_native_image(
-    ledger_path: Path,
-    bucket: storage.Bucket,
+    context: NormalizationContext,
     asset: ImageAsset,
-    overrides: InversionOverrides,
 ) -> int:
     """Designate a native image, writing a new object only when it is inverted."""
-    raw_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
-    image = _normalize_bytes(asset, raw_bytes, asset.gcs_object, is_forced_inverted(asset, overrides))
+    raw_bytes = context.bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
+    image = _normalize_bytes(asset, raw_bytes, asset.gcs_object, is_forced_inverted(asset, context.overrides))
     if image.gcs_object != asset.gcs_object:
-        bucket.blob(image.gcs_object).upload_from_string(
+        context.bucket.blob(image.gcs_object).upload_from_string(
             invert_image(raw_bytes, asset.gcs_object),
             content_type=_image_content_type(image.gcs_object),
             timeout=600,
         )
-    append_event(ledger_path, image_normalized(image))
+    append_event(context.ledger_path, image_normalized(image))
     return 1
 
 
 def normalize_pdf_asset(
-    config: PipelineConfig,
-    ledger_path: Path,
-    bucket: storage.Bucket,
-    client: storage.Client,
+    context: NormalizationContext,
     asset: PdfAsset,
-    overrides: InversionOverrides,
 ) -> int:
     """Render one PDF and store its presentation/OCR image assets."""
-    pdf_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
+    pdf_bytes = context.bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
     created = 0
-    for image, image_bytes in iter_pdf_image_assets(config, asset, pdf_bytes, overrides):
-        store_pdf_image(bucket, client, image, image_bytes)
-        append_event(ledger_path, image_normalized(image))
+    for image, image_bytes in iter_pdf_image_assets(context.config, asset, pdf_bytes, context.overrides):
+        store_pdf_image(context.bucket, context.storage_client, image, image_bytes)
+        append_event(context.ledger_path, image_normalized(image))
         created += 1
-    append_event(ledger_path, image_normalized(asset))
+    append_event(context.ledger_path, image_normalized(asset))
     return created
 
 
