@@ -16,7 +16,13 @@ from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.download_source import download_source_assets
-from vie_doc_pipeline.workflow.normalize_images import normalize_images
+from vie_doc_pipeline.workflow.normalize_images import (
+    AllNormalizationCandidates,
+    ImageNormalizationCandidates,
+    SourceNormalizationCandidates,
+    NormalizationSelection,
+    normalize_images,
+)
 from vie_doc_pipeline.workflow.ocr import check_ocr_status, submit_ocr_jobs
 
 configure_logging()
@@ -91,15 +97,30 @@ def images_normalize(
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
+    selection = normalization_selection(source_id, image_id)
     if inverted:
-        if bool(source_id) == bool(image_id):
-            raise typer.BadParameter("--inverted requires exactly one of --source-id or --image-id")
-        append_event(ledger_path, source_inverted(source_id) if source_id else image_inverted(image_id or ""))
-    summary = normalize_images(config, ledger_path, limit=limit, source_id=source_id, image_key=image_id)
+        match selection:
+            case SourceNormalizationCandidates():
+                append_event(ledger_path, source_inverted(selection.source_id))
+            case ImageNormalizationCandidates():
+                append_event(ledger_path, image_inverted(selection.image_key))
+            case AllNormalizationCandidates():
+                raise typer.BadParameter("--inverted requires --source-id or --image-id")
+    summary = normalize_images(config, ledger_path, limit=limit, selection=selection)
     print(f"Images created: {summary.created}")
     print(f"Native images : {summary.native_registered} (registered without copying)")
     print(f"Failed        : {summary.failed}")
     print(f"Ledger      : {ledger_path}")
+
+
+def normalization_selection(source_id: str | None, image_id: str | None) -> NormalizationSelection:
+    if source_id and image_id:
+        raise typer.BadParameter("Specify at most one of --source-id or --image-id")
+    if source_id:
+        return SourceNormalizationCandidates(source_id)
+    if image_id:
+        return ImageNormalizationCandidates(image_id)
+    return AllNormalizationCandidates()
 
 
 @images_app.command("review")

@@ -31,6 +31,26 @@ class InversionOverrides:
 
 
 @dataclass(frozen=True)
+class AllNormalizationCandidates:
+    pass
+
+
+@dataclass(frozen=True)
+class SourceNormalizationCandidates:
+    source_id: str
+
+
+@dataclass(frozen=True)
+class ImageNormalizationCandidates:
+    image_key: str
+
+
+NormalizationSelection = (
+    AllNormalizationCandidates | SourceNormalizationCandidates | ImageNormalizationCandidates
+)
+
+
+@dataclass(frozen=True)
 class NormalizationContext:
     """External capabilities and fixed inputs for one normalisation-stage run."""
 
@@ -45,15 +65,14 @@ def normalize_images(
     config: PipelineConfig,
     ledger_path: Path,
     limit: int | None = None,
-    source_id: str | None = None,
-    image_key: str | None = None,
+    selection: NormalizationSelection = AllNormalizationCandidates(),
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
     current = load_current(ledger_path)
     overrides = load_inversion_overrides(ledger_path)
-    assets = iter_normalization_candidates(current, source_id, image_key, limit)
+    assets = iter_normalization_candidates(current, selection, limit)
     context = NormalizationContext(config, ledger_path, bucket, client, overrides)
     results = (normalize_asset(context, asset) for asset in assets)
     return summarize_normalization(results)
@@ -61,31 +80,26 @@ def normalize_images(
 
 def iter_normalization_candidates(
     current: CurrentState,
-    source_id: str | None,
-    image_key: str | None,
+    selection: NormalizationSelection,
     limit: int | None,
 ) -> Iterator[SourceAsset]:
     """Yield source assets selected for normalisation or explicit reprocessing."""
-    if not source_id and not image_key:
-        yield from islice((state.asset for state in assets_at(current, "source_downloaded") if state.asset is not None), limit)
-        return
+    match selection:
+        case AllNormalizationCandidates():
+            candidates = (state.asset for state in assets_at(current, "source_downloaded") if state.asset is not None)
+        case SourceNormalizationCandidates():
+            candidates = (asset for _, asset in iter_reprocessable_assets(current) if _source_id(asset) == selection.source_id)
+        case ImageNormalizationCandidates():
+            candidates = (asset for key, asset in iter_reprocessable_assets(current) if key == selection.image_key)
+    yield from islice(candidates, limit)
 
-    yield from islice(
-        iter_selected_assets(current, source_id, image_key),
-        limit,
-    )
 
-
-def iter_selected_assets(
-    current: CurrentState, source_id: str | None, image_key: str | None
-) -> Iterator[SourceAsset]:
+def iter_reprocessable_assets(current: CurrentState) -> Iterator[tuple[str, SourceAsset]]:
     """Yield explicitly selected assets without repeatedly decoding ledger data."""
     for key, state in current.items():
         if state.asset is None or state.event not in {"source_downloaded", "image_normalized"}:
             continue
-        asset = state.asset
-        if (source_id is not None and _source_id(asset) == source_id) or key == image_key:
-            yield asset
+        yield key, state.asset
 
 
 def normalize_asset(

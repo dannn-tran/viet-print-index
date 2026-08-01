@@ -1,11 +1,14 @@
 import unittest
 
 from google.api_core import exceptions as google_exceptions
+import typer
+from vie_doc_pipeline.cli import normalization_selection
 from vie_doc_pipeline.models import PdfAsset
 from vie_doc_pipeline.sources.http import SourceHttpError, TransientSourceError
 from vie_doc_pipeline.workflow.download_source import AlreadyDownloaded, DownloadFailed, Downloaded, _failure_details, summarize_downloads
 from vie_doc_pipeline.workflow.normalize_images import summarize_normalization
 from vie_doc_pipeline.workflow.results import NormalizationSummary
+from vie_doc_pipeline.workflow.normalize_images import AllNormalizationCandidates, ImageNormalizationCandidates, SourceNormalizationCandidates
 
 
 class WorkflowResultTest(unittest.TestCase):
@@ -26,3 +29,10 @@ class WorkflowResultTest(unittest.TestCase):
         self.assertEqual(_failure_details(google_exceptions.ServiceUnavailable("temporary")), (True, 1))
         self.assertEqual(_failure_details(SourceHttpError("url", 404)), (False, 1))
         self.assertEqual(_failure_details(ValueError("bug")), (False, 1))
+
+    def test_normalization_selection_has_one_explicit_mode(self) -> None:
+        self.assertEqual(normalization_selection(None, None), AllNormalizationCandidates())
+        self.assertEqual(normalization_selection("issue", None), SourceNormalizationCandidates("issue"))
+        self.assertEqual(normalization_selection(None, "pub/issue/001"), ImageNormalizationCandidates("pub/issue/001"))
+        with self.assertRaises(typer.BadParameter):
+            normalization_selection("issue", "pub/issue/001")
