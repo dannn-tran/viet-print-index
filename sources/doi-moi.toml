@@ -2,7 +2,8 @@
 id = "doi-moi"
 name = "Doi Moi"
 
-[gcs]
+[target]
+type = "gcs"
 project = "vie-ocr"
 bucket = "vie-doc"
 pdf_prefix = "doi-moi/pdf"

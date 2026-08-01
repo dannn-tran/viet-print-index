@@ -16,7 +16,7 @@ class PdfAsset:
     publication_id: str
     document_id: str
     source_url: str
-    gcs_object: str
+    target_path: str
     kind: Literal["pdf"] = "pdf"
 
     @property
@@ -32,7 +32,7 @@ class PdfAsset:
             publication_id=_required_string(raw, "publication_id"),
             document_id=_required_string(raw, "document_id"),
             source_url=_required_string(raw, "source_url"),
-            gcs_object=_required_string(raw, "gcs_object"),
+            target_path=_required_string(raw, "target_path"),
         )
 
 
@@ -44,7 +44,7 @@ class ImageAsset:
     issue_id: str
     page_id: str
     source_url: str
-    gcs_object: str
+    target_path: str
     kind: AssetKind = "image"
     width: int | None = None
     height: int | None = None
@@ -69,7 +69,7 @@ class ImageAsset:
             issue_id=_required_string(raw, "issue_id"),
             page_id=_required_string(raw, "page_id"),
             source_url=_required_string(raw, "source_url"),
-            gcs_object=_required_string(raw, "gcs_object"),
+            target_path=_required_string(raw, "target_path"),
             width=_optional_int(raw, "width"),
             height=_optional_int(raw, "height"),
             issue_label=_optional_string(raw, "issue_label"),

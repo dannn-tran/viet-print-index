@@ -1,11 +1,12 @@
 """Validated configuration records and TOML loading."""
 
+import hashlib
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from vie_doc_pipeline.images.pdf import ExplodeParams
 
@@ -17,12 +18,29 @@ class PublicationConfig:
 
 
 @dataclass(frozen=True)
-class GcsConfig:
+class GcsTarget:
+    """Google Cloud Storage target for durable source, image, and OCR objects."""
+
     project: str
     bucket: str
     pdf_prefix: str
     images_prefix: str
     ocr_output_prefix: str
+    type: Literal["gcs"] = "gcs"
+
+
+@dataclass(frozen=True)
+class LocalTarget:
+    """Filesystem target using paths relative to one local root directory."""
+
+    root: str = "."
+    pdf_prefix: str = "pdf"
+    images_prefix: str = "images"
+    ocr_output_prefix: str = "ocr"
+    type: Literal["local"] = "local"
+
+
+TargetStorage: TypeAlias = GcsTarget | LocalTarget
 
 
 @dataclass(frozen=True)
@@ -63,9 +81,11 @@ SourceConfig: TypeAlias = (
 
 
 @dataclass(frozen=True)
-class AcquisitionConfig:
-    max_workers: int = 4
-    min_request_interval_seconds: float = 0.0
+class SourceRequestsConfig:
+    """Concurrency, pacing, and retry policy for requests to source servers."""
+
+    max_concurrent_requests: int = 4
+    min_interval_seconds: float = 0.0
     max_attempts: int = 5
     backoff_factor: float = 1.0
     backoff_max_seconds: float = 30.0
@@ -80,27 +100,29 @@ class OcrConfig:
 @dataclass(frozen=True)
 class PipelineConfig:
     publication: PublicationConfig
-    gcs: GcsConfig
+    target: TargetStorage
     source: SourceConfig
     explode: ExplodeParams
     ocr: OcrConfig
-    acquisition: AcquisitionConfig = AcquisitionConfig()
+    source_requests: SourceRequestsConfig = SourceRequestsConfig()
+    config_sha256: str | None = None
 
 
 def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
     path = Path(config_dir) / f"{pub_id}.toml"
     if not path.exists():
         raise FileNotFoundError(f"No config found for '{pub_id}' at {path}")
-    with open(path, "rb") as f:
-        raw = tomllib.load(f)
+    raw_bytes = path.read_bytes()
+    raw = tomllib.loads(raw_bytes.decode("utf-8"))
 
     config = PipelineConfig(
         publication=parse_publication(_required_table(raw, "publication")),
-        gcs=parse_gcs(_required_table(raw, "gcs")),
+        target=parse_target(_required_table(raw, "target")),
         source=parse_source(_optional_table(raw, "source")),
         explode=parse_explode(_optional_table(raw, "explode")),
         ocr=parse_ocr(_optional_table(raw, "ocr")),
-        acquisition=parse_acquisition(_optional_table(raw, "acquisition")),
+        source_requests=parse_source_requests(_optional_table(raw, "source_requests")),
+        config_sha256=hashlib.sha256(raw_bytes).hexdigest(),
     )
     _validate_config(config)
     return config
@@ -113,14 +135,29 @@ def parse_publication(raw: Mapping[str, object]) -> PublicationConfig:
     )
 
 
-def parse_gcs(raw: Mapping[str, object]) -> GcsConfig:
-    return GcsConfig(
-        project=_required_string(raw, "project", "gcs"),
-        bucket=_required_string(raw, "bucket", "gcs"),
-        pdf_prefix=_required_string(raw, "pdf_prefix", "gcs").rstrip("/"),
-        images_prefix=_required_string(raw, "images_prefix", "gcs").rstrip("/"),
-        ocr_output_prefix=_required_string(raw, "ocr_output_prefix", "gcs").rstrip("/"),
-    )
+def parse_target(raw: Mapping[str, object]) -> TargetStorage:
+    """Decode the configured durable target into one storage variant."""
+    target_type = _optional_string(raw.get("type"), "target.type")
+    match target_type:
+        case "gcs":
+            return GcsTarget(
+                project=_required_string(raw, "project", "target"),
+                bucket=_required_string(raw, "bucket", "target"),
+                pdf_prefix=_required_string(raw, "pdf_prefix", "target").rstrip("/"),
+                images_prefix=_required_string(raw, "images_prefix", "target").rstrip("/"),
+                ocr_output_prefix=_required_string(raw, "ocr_output_prefix", "target").rstrip("/"),
+            )
+        case "local":
+            return LocalTarget(
+                root=_optional_string(raw.get("root"), "target.root") or ".",
+                pdf_prefix=_optional_string(raw.get("pdf_prefix"), "target.pdf_prefix") or "pdf",
+                images_prefix=_optional_string(raw.get("images_prefix"), "target.images_prefix") or "images",
+                ocr_output_prefix=(
+                    _optional_string(raw.get("ocr_output_prefix"), "target.ocr_output_prefix") or "ocr"
+                ),
+            )
+        case _:
+            raise ValueError(f"Unknown target.type: {target_type!r}; expected 'gcs' or 'local'")
 
 
 def parse_source(raw: Mapping[str, object]) -> SourceConfig:
@@ -167,14 +204,22 @@ def parse_ocr(raw: Mapping[str, object]) -> OcrConfig:
     return OcrConfig(language_hints=_parse_strings(raw.get("language_hints", ()), "ocr.language_hints"))
 
 
-def parse_acquisition(raw: Mapping[str, object]) -> AcquisitionConfig:
-    return AcquisitionConfig(
-        max_workers=_parse_int(raw.get("max_workers", 4), "acquisition.max_workers"),
-        min_request_interval_seconds=_parse_float(raw.get("min_request_interval_seconds", 0.0), "acquisition.min_request_interval_seconds"),
-        max_attempts=_parse_int(raw.get("max_attempts", 5), "acquisition.max_attempts"),
-        backoff_factor=_parse_float(raw.get("backoff_factor", 1.0), "acquisition.backoff_factor"),
-        backoff_max_seconds=_parse_float(raw.get("backoff_max_seconds", 30.0), "acquisition.backoff_max_seconds"),
-        backoff_jitter_seconds=_parse_float(raw.get("backoff_jitter_seconds", 0.5), "acquisition.backoff_jitter_seconds"),
+def parse_source_requests(raw: Mapping[str, object]) -> SourceRequestsConfig:
+    return SourceRequestsConfig(
+        max_concurrent_requests=_parse_int(
+            raw.get("max_concurrent_requests", 4), "source_requests.max_concurrent_requests"
+        ),
+        min_interval_seconds=_parse_float(
+            raw.get("min_interval_seconds", 0.0), "source_requests.min_interval_seconds"
+        ),
+        max_attempts=_parse_int(raw.get("max_attempts", 5), "source_requests.max_attempts"),
+        backoff_factor=_parse_float(raw.get("backoff_factor", 1.0), "source_requests.backoff_factor"),
+        backoff_max_seconds=_parse_float(
+            raw.get("backoff_max_seconds", 30.0), "source_requests.backoff_max_seconds"
+        ),
+        backoff_jitter_seconds=_parse_float(
+            raw.get("backoff_jitter_seconds", 0.5), "source_requests.backoff_jitter_seconds"
+        ),
     )
 
 
@@ -262,9 +307,15 @@ def _parse_required_date(raw: Mapping[str, object], field: str) -> date:
 
 
 def _validate_config(config: PipelineConfig) -> None:
-    if config.acquisition.max_workers < 1:
-        raise ValueError("acquisition.max_workers must be at least one")
-    if config.acquisition.min_request_interval_seconds < 0:
-        raise ValueError("acquisition.min_request_interval_seconds must be non-negative")
-    if config.acquisition.max_attempts < 1:
-        raise ValueError("acquisition.max_attempts must be at least one")
+    if config.source_requests.max_concurrent_requests < 1:
+        raise ValueError("source_requests.max_concurrent_requests must be at least one")
+    if config.source_requests.min_interval_seconds < 0:
+        raise ValueError("source_requests.min_interval_seconds must be non-negative")
+    if config.source_requests.max_attempts < 1:
+        raise ValueError("source_requests.max_attempts must be at least one")
+    if config.source_requests.backoff_factor < 0:
+        raise ValueError("source_requests.backoff_factor must be non-negative")
+    if config.source_requests.backoff_max_seconds < 0:
+        raise ValueError("source_requests.backoff_max_seconds must be non-negative")
+    if config.source_requests.backoff_jitter_seconds < 0:
+        raise ValueError("source_requests.backoff_jitter_seconds must be non-negative")

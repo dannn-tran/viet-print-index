@@ -8,7 +8,7 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
-from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
 from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.assets import ImageAsset
@@ -41,9 +41,16 @@ _StateDir = Annotated[Path, typer.Option(help="Directory for inspectable JSONL s
 
 
 @app.command()
-def status(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
+def status(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
     """Summarise current workflow lifecycle and review states."""
-    current = load_current(default_ledger_path(pub_id, state_dir))
+    config = load_config(pub_id, config_dir)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    ensure_ledger_config(ledger_path, config.config_sha256)
+    current = load_current(ledger_path, config.config_sha256)
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
     print(f"Assets      : {len(current)}")
@@ -62,6 +69,7 @@ def source_discover(
     """Discover external source records into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
+    ensure_ledger_config(ledger_path, config.config_sha256)
     assets = discover_source_assets(config, ledger_path, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"Ledger      : {ledger_path}")
@@ -74,12 +82,12 @@ def source_download(
     limit: _Limit = None,
     state_dir: _StateDir = Path(".pipeline-state"),
 ) -> None:
-    """Download discovered original source assets into GCS."""
+    """Download discovered original source assets into target storage."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
     summary = download_source_assets(config, ledger_path, limit=limit)
     print(f"Downloaded  : {summary.downloaded}")
-    print(f"Already in GCS: {summary.already_present}")
+    print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
     print(f"Ledger      : {ledger_path}")
 
@@ -97,6 +105,7 @@ def images_normalize(
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
+    ensure_ledger_config(ledger_path, config.config_sha256)
     selection = normalization_selection(source_id, image_id)
     if inverted:
         match selection:
@@ -124,9 +133,16 @@ def normalization_selection(source_id: str | None, image_id: str | None) -> Norm
 
 
 @images_app.command("review")
-def images_review(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
+def images_review(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
     """List normalized images that were retained unchanged for manual review."""
-    current = load_current(default_ledger_path(pub_id, state_dir))
+    config = load_config(pub_id, config_dir)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    ensure_ledger_config(ledger_path, config.config_sha256)
+    current = load_current(ledger_path, config.config_sha256)
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")

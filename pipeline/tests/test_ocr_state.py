@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from vie_doc_pipeline.config import GcsConfig, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
+from vie_doc_pipeline.config import GcsTarget, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, source_discovered
 from vie_doc_pipeline.ledger.jsonl import append_event
@@ -22,7 +22,7 @@ class OcrStateTest(unittest.TestCase):
     def test_status_session_closes_storage_client(self) -> None:
         config = PipelineConfig(
             publication=PublicationConfig("pub", "Publication"),
-            gcs=GcsConfig("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
+            target=GcsTarget("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
             source=LocalPdfSource("."),
             explode=ExplodeParams(),
             ocr=OcrConfig(),

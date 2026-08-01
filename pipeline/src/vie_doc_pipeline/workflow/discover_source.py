@@ -11,7 +11,7 @@ from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.ledger.projection import load_current
-from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
 
 
 def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
@@ -24,7 +24,7 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
             issue_id=item.issue_id,
             page_id=item.page_id,
             source_url=item.source_url,
-            gcs_object=f"{config.gcs.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
+            target_path=f"{config.target.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
             width=item.width,
             height=item.height,
             issue_label=item.issue_label,
@@ -35,7 +35,7 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
         publication_id=config.publication.id,
         document_id=document_id,
         source_url=item.source_url,
-        gcs_object=f"{config.gcs.pdf_prefix}/{filename}",
+        target_path=f"{config.target.pdf_prefix}/{filename}",
     )
 
 
@@ -43,8 +43,9 @@ def discover_source_assets(
     config: PipelineConfig, ledger_path: Path, limit: int | None = None
 ) -> list[SourceAsset]:
     """Discover external source records that are not already in the ledger."""
+    ensure_ledger_config(ledger_path, config.config_sha256)
     with open_source_items(config) as source_items:
-        current = load_current(ledger_path)
+        current = load_current(ledger_path, config.config_sha256)
         known_asset_keys = set(current)
         new_assets: list[SourceAsset] = []
         for item in islice(source_items.iter_source_items(), limit):

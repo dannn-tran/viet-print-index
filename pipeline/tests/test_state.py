@@ -4,12 +4,40 @@ import unittest
 from pathlib import Path
 
 from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_downloaded
-from vie_doc_pipeline.ledger.jsonl import append_event, read_events
+from vie_doc_pipeline.ledger.jsonl import LedgerConfigMismatchError, append_event, ensure_ledger_config, read_events
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
 from vie_doc_pipeline.assets import ImageAsset
 
 
 class JsonlLedgerTest(unittest.TestCase):
+    def test_records_and_validates_config_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            ensure_ledger_config(path, "a" * 64)
+            ensure_ledger_config(path, "a" * 64)
+
+            self.assertEqual(read_events(path, "a" * 64)[0].event, "ledger_initialized")
+            self.assertEqual(len(read_events(path)), 1)
+            with self.assertRaises(LedgerConfigMismatchError):
+                ensure_ledger_config(path, "b" * 64)
+
+            with self.assertRaises(LedgerConfigMismatchError):
+                read_events(path, "b" * 64)
+
+    def test_refuses_to_mix_legacy_events_with_a_fingerprinted_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            append_event(path, source_discovered(ImageAsset(
+                publication_id="pub",
+                issue_id="issue",
+                page_id="001",
+                source_url="https://example.test/1",
+                target_path="pub/images/1.jpg",
+            )))
+
+            with self.assertRaises(LedgerConfigMismatchError):
+                ensure_ledger_config(path, "a" * 64)
+
     def test_appends_inspectable_events_and_reconstructs_current_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
@@ -18,7 +46,7 @@ class JsonlLedgerTest(unittest.TestCase):
                 issue_id="WNyf19450905",
                 page_id="001",
                 source_url="https://example.test/page.jpg",
-                gcs_object="nlv-cuu-quoc/images/WNyf19450905/001.jpg",
+                target_path="nlv-cuu-quoc/images/WNyf19450905/001.jpg",
             )
             append_event(path, source_discovered(asset))
             append_event(path, source_downloaded(asset, checksum="abc123", size_bytes=100))
@@ -35,7 +63,7 @@ class JsonlLedgerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
             append_event(path, source_discovered(ImageAsset(
-                publication_id="pub", issue_id="issue", page_id="001", source_url="https://example.test/1", gcs_object="pub/images/1.jpg"
+                publication_id="pub", issue_id="issue", page_id="001", source_url="https://example.test/1", target_path="pub/images/1.jpg"
             )))
             asset_key = "pub/issue/001"
             append_event(path, failed(asset_key, stage="download", error="temporary failure"))

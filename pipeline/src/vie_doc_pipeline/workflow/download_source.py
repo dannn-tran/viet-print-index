@@ -1,4 +1,4 @@
-"""Download discovered original source assets into GCS."""
+"""Download discovered original source assets into the configured target."""
 
 from __future__ import annotations
 
@@ -11,16 +11,16 @@ from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
-from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_downloaded
-from vie_doc_pipeline.ledger.jsonl import append_event
-from vie_doc_pipeline.ledger.locking import acquisition_lock
+from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
+from vie_doc_pipeline.ledger.locking import source_download_lock
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
+from vie_doc_pipeline.storage import TargetStore, open_target_store
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,7 @@ DownloadOutcome = Downloaded | AlreadyDownloaded | DownloadFailed
 class DownloadContext:
     """External capabilities and policy fixed for one download-stage run."""
 
-    bucket: storage.Bucket
-    storage_client: storage.Client
+    store: TargetStore
     http: HttpClient
     ledger_path: Path
     retry_delay: float
@@ -63,13 +62,12 @@ class DownloadContext:
     def download(self, asset: SourceAsset) -> DownloadOutcome:
         """Store one asset and persist its outcome in this stage session."""
         try:
-            blob = self.bucket.blob(asset.gcs_object)
-            if blob.exists(self.storage_client):
-                blob.reload(self.storage_client)
-                append_event(self.ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
+            existing = self.store.inspect(asset.target_path)
+            if existing is not None:
+                append_event(self.ledger_path, source_downloaded(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
                 return AlreadyDownloaded(asset)
             data = self.http.fetch_bytes(asset.source_url)
-            blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
+            self.store.write_bytes(asset.target_path, data, content_type=_content_type(asset))
             append_event(self.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             return Downloaded(asset)
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
@@ -79,31 +77,31 @@ class DownloadContext:
 
 def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
     """Download discovered source assets, resuming from the ledger."""
-    with acquisition_lock(ledger_path):
-        storage_client = storage.Client(project=config.gcs.project)
-        try:
-            bucket = storage_client.bucket(config.gcs.bucket)
-            assets = iter_download_candidates(ledger_path, limit)
-            client = http_client(config.acquisition)
+    with source_download_lock(ledger_path):
+        ensure_ledger_config(ledger_path, config.config_sha256)
+        with open_target_store(config.target) as store:
+            assets = iter_download_candidates(ledger_path, limit, config.config_sha256)
+            client = http_client(config.source_requests)
             try:
                 context = DownloadContext(
-                    bucket=bucket,
-                    storage_client=storage_client,
+                    store=store,
                     http=client,
                     ledger_path=ledger_path,
-                    retry_delay=config.acquisition.backoff_max_seconds,
+                    retry_delay=config.source_requests.backoff_max_seconds,
                 )
-                outcomes = run_downloads(context, assets, config.acquisition.max_workers)
+                outcomes = run_downloads(context, assets, config.source_requests.max_concurrent_requests)
                 return summarize_downloads(outcomes)
             finally:
                 client.close()
-        finally:
-            storage_client.close()
 
 
-def iter_download_candidates(ledger_path: Path, limit: int | None) -> Iterator[SourceAsset]:
+def iter_download_candidates(
+    ledger_path: Path,
+    limit: int | None,
+    expected_config_sha256: str | None = None,
+) -> Iterator[SourceAsset]:
     """Yield source assets that the ledger says are eligible for another attempt."""
-    current = load_current(ledger_path)
+    current = load_current(ledger_path, expected_config_sha256)
     assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
     yield from islice(assets, limit)
 
@@ -111,15 +109,15 @@ def iter_download_candidates(ledger_path: Path, limit: int | None) -> Iterator[S
 def run_downloads(
     context: DownloadContext,
     assets: Iterable[SourceAsset],
-    max_workers: int,
+    max_concurrent_requests: int,
 ) -> Iterator[DownloadOutcome]:
     """Apply one download function concurrently while retaining input ordering."""
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
         yield from executor.map(context.download, assets)
 
 
 def record_download_failure(ledger_path: Path, asset: SourceAsset, error: Exception, retry_delay: float) -> None:
-    """Persist retry metadata for one failed source acquisition."""
+    """Persist retry metadata for one failed source download."""
     retryable, attempts = _failure_details(error)
     append_event(
         ledger_path,

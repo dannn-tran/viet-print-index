@@ -2,7 +2,8 @@
 id = "thanh-nghi"
 name = "Thanh Nghi"
 
-[gcs]
+[target]
+type = "gcs"
 project = "vie-ocr"
 bucket = "vie-doc"
 pdf_prefix = "thanh-nghi/pdf"

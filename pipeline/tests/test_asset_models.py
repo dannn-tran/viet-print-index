@@ -9,7 +9,7 @@ class PdfAssetTest(unittest.TestCase):
             publication_id="doi-moi",
             document_id="issue-001",
             source_url="https://example.test/issue-001.pdf",
-            gcs_object="doi-moi/pdf/issue-001.pdf",
+            target_path="doi-moi/pdf/issue-001.pdf",
         )
 
         self.assertEqual(asset.key, "doi-moi/document/issue-001")

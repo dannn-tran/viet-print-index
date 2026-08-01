@@ -7,7 +7,7 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 ## Architecture
 
 ```
-[sources/]          [vie-pipeline]                   [GCS bucket]
+[sources/]          [vie-pipeline]                   [target storage]
   *.toml  ──────►  source discover/download  ─────► original assets
   (per-pub config) images normalize          ─────► image assets
                     OCR submit/check          ─────► OCR JSON
@@ -24,7 +24,8 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
                                             vpi view ──► local cache ──► open image
 ```
 
-Two toolchains, one contract. GCS is the durable store and the handoff point between them.
+Two toolchains, one contract. The configured target is the durable store and the
+handoff point between them; production runs normally use GCS.
 
 The Python package keeps the workflow boundaries visible: `config.py` decodes
 TOML into typed values, `assets.py` owns the cross-stage asset contract,
@@ -94,7 +95,7 @@ JSONL ledger at `.pipeline-state/v2/<pub>.jsonl`:
 
 ```sh
 vie-pipeline source discover <pub-id>  # enumerate original source records
-vie-pipeline source download <pub-id>  # acquire originals into GCS
+vie-pipeline source download <pub-id>  # download originals into target storage
 vie-pipeline images normalize <pub-id> # create presentation/OCR image assets
 vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
 vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
@@ -103,7 +104,7 @@ vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
 ### Workflow contracts
 
 - Source adapters only enumerate source items. They do not apply CLI batch
-  limits, write the ledger, or create GCS objects.
+  limits, write the ledger, or create target objects.
 - Each workflow stage applies `--limit` once, immediately after selecting its
   candidate assets and before performing external work.
 - TOML is decoded into a validated source variant before discovery. A Veridian
@@ -111,31 +112,54 @@ vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
   therefore cannot be confused at runtime.
 - JSONL is the durable, human-inspectable event format; Python projects it into
   typed in-memory asset state for workflow decisions.
+- The first JSONL record stores the SHA-256 of the exact TOML bytes used for the
+  run. Loading a ledger with a different TOML fails before work begins, so
+  configuration changes cannot silently mix states.
+- The ledger stores this fingerprint, not a copy of the full TOML; retain the
+  versioned source config when you need to reconstruct historical settings.
 - Workflows return typed summaries. The CLI alone prints human-facing output.
 
-### Resilient acquisition
+### Source request policy
 
-HTTP acquisition is generic across source adapters. Configure bounded
-concurrency, source-wide request pacing, and urllib3 retry behaviour per
-publication:
+HTTP requests are generic across source adapters. Configure bounded
+concurrency, source-wide pacing, and bounded retries per publication:
 
 ```toml
-[acquisition]
-max_workers = 2
-min_request_interval_seconds = 1.0
+[source_requests]
+max_concurrent_requests = 2
+min_interval_seconds = 1.0
 max_attempts = 5
 backoff_factor = 1.0
 backoff_max_seconds = 30.0
 backoff_jitter_seconds = 0.5
 ```
 
-The request interval applies to every initial request and retry across worker
+The interval applies to every initial request and retry across worker
 threads. Temporary network failures and HTTP `429`, `500`, `502`, `503`, and
 `504` retry with backoff and respect `Retry-After`; other HTTP 4xx responses
 are recorded as permanent failures. Each completed download is immediately
 written to the ledger. Re-running `source download` resumes eligible work,
-skips GCS objects already present, and leaves permanent failures untouched.
-Only one acquisition command may run for a publication at once.
+skips target objects already present, and leaves permanent failures untouched.
+Only one source-download command may run for a publication at once.
+
+### Target storage
+
+The `[target]` section selects where source, image, and OCR objects live. GCS
+is the production target; a local target is useful for previews and offline
+development:
+
+```toml
+[target]
+type = "local"
+root = "out/cuu-quoc"
+pdf_prefix = "pdf"
+images_prefix = "images"
+ocr_output_prefix = "ocr"
+```
+
+For GCS, use `type = "gcs"` with `project`, `bucket`, and the three prefixes.
+OCR submission requires a GCS target because Google Vision batch OCR reads and
+writes GCS objects.
 
 An `ImageAsset` may be a page, spread, cover, or other scanned unit. Native
 images that need no correction remain at their original GCS object; PDF sources
@@ -175,7 +199,7 @@ vie-pipeline status <pub-id>
 Some sources use the National Library of Vietnam's Veridian viewer rather
 than PDFs. It is an image-native source and therefore follows the same staged
 workflow as every other source. A native full-page JPEG that does not need
-normalization is registered in place, without a duplicate GCS object.
+normalization is registered in place, without a duplicate target object.
 
 ```sh
 # Discover full-page source assets into an inspectable v2 ledger
@@ -308,7 +332,8 @@ gcs_blobs  -- GCS ingestion checkpoint (blob_name, indexed_at)
 id   = "thanh-nghi"
 name = "Thanh Nghi"
 
-[gcs]
+[target]
+type              = "gcs"
 project           = "vie-ocr"
 bucket            = "vie-doc"
 pdf_prefix        = "thanh-nghi/pdf"
@@ -336,6 +361,14 @@ dpi                  = 300
 
 [ocr]
 language_hints = ["vi"]
+
+[source_requests]
+max_concurrent_requests = 2
+min_interval_seconds = 1.0
+max_attempts = 5
+backoff_factor = 1.0
+backoff_max_seconds = 30.0
+backoff_jitter_seconds = 0.5
 ```
 
 ---

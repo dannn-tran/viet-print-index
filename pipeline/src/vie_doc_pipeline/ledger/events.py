@@ -17,7 +17,7 @@ class LedgerEvent:
     """An append-only transition in the asset lifecycle."""
 
     event: Literal[
-        "source_discovered", "source_downloaded", "image_normalized",
+        "ledger_initialized", "source_discovered", "source_downloaded", "image_normalized",
         "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
     ]
     asset_key: str
@@ -43,13 +43,17 @@ class LedgerEvent:
 
 
 _EVENT_NAMES = {
-    "source_discovered", "source_downloaded", "image_normalized",
+    "ledger_initialized", "source_discovered", "source_downloaded", "image_normalized",
     "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
 }
 
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def ledger_initialized(config_sha256: str) -> LedgerEvent:
+    return _event("ledger_initialized", "__ledger__", {"config_sha256": config_sha256})
 
 
 def source_discovered(asset: Asset) -> LedgerEvent:
@@ -101,7 +105,7 @@ def image_inverted(image_key: str) -> LedgerEvent:
 
 
 EventName = Literal[
-    "source_discovered", "source_downloaded", "image_normalized",
+    "ledger_initialized", "source_discovered", "source_downloaded", "image_normalized",
     "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
 ]
 

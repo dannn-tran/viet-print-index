@@ -70,7 +70,7 @@ class VeridianSourceItemProvider(SourceItemProvider):
 
     @classmethod
     def open(cls, source: VeridianSource, config: PipelineConfig) -> "VeridianSourceItemProvider":
-        return cls(source, http_client(config.acquisition))
+        return cls(source, http_client(config.source_requests))
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_veridian(self.source, self.http)
@@ -86,7 +86,7 @@ class WebPageSourceItemProvider(SourceItemProvider):
 
     @classmethod
     def open(cls, source: WebPagePdfSource, config: PipelineConfig) -> "WebPageSourceItemProvider":
-        return cls(source, http_client(config.acquisition))
+        return cls(source, http_client(config.source_requests))
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_web_page(

@@ -9,14 +9,15 @@ from typing import Iterator
 
 
 @contextmanager
-def acquisition_lock(ledger_path: Path) -> Iterator[None]:
-    path = ledger_path.with_suffix(ledger_path.suffix + ".acquisition.lock")
+def source_download_lock(ledger_path: Path) -> Iterator[None]:
+    """Allow only one source-download command per publication ledger."""
+    path = ledger_path.with_suffix(ledger_path.suffix + ".source-download.lock")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise RuntimeError(f"Another acquisition command is already running for {ledger_path.stem}") from error
+            raise RuntimeError(f"Another source-download command is already running for {ledger_path.stem}") from error
         try:
             yield
         finally:

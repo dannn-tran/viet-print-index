@@ -10,17 +10,17 @@ from itertools import islice
 from pathlib import Path
 from pathlib import PurePosixPath
 
-from google.cloud import storage
 from google.api_core import exceptions as google_exceptions
 import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.jsonl import append_event, read_events
+from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config, read_events
 from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
+from vie_doc_pipeline.storage import TargetStore, open_target_store
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,7 @@ class NormalizationContext:
 
     config: PipelineConfig
     ledger_path: Path
-    bucket: storage.Bucket
-    storage_client: storage.Client
+    store: TargetStore
     overrides: InversionOverrides
 
 
@@ -76,17 +75,14 @@ def normalize_images(
     selection: NormalizationSelection = AllNormalizationCandidates(),
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
-    client = storage.Client(project=config.gcs.project)
-    try:
-        bucket = client.bucket(config.gcs.bucket)
-        current = load_current(ledger_path)
-        overrides = load_inversion_overrides(ledger_path)
+    ensure_ledger_config(ledger_path, config.config_sha256)
+    with open_target_store(config.target) as store:
+        current = load_current(ledger_path, config.config_sha256)
+        overrides = load_inversion_overrides(ledger_path, config.config_sha256)
         assets = iter_normalization_candidates(current, selection, limit)
-        context = NormalizationContext(config, ledger_path, bucket, client, overrides)
+        context = NormalizationContext(config, ledger_path, store, overrides)
         results = (normalize_asset(context, asset) for asset in assets)
         return summarize_normalization(results)
-    finally:
-        client.close()
 
 
 def iter_normalization_candidates(
@@ -135,13 +131,13 @@ def normalize_native_image(
     asset: ImageAsset,
 ) -> int:
     """Designate a native image, writing a new object only when it is inverted."""
-    raw_bytes = context.bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
-    image = _normalize_bytes(asset, raw_bytes, asset.gcs_object, is_forced_inverted(asset, context.overrides))
-    if image.gcs_object != asset.gcs_object:
-        context.bucket.blob(image.gcs_object).upload_from_string(
-            invert_image(raw_bytes, asset.gcs_object),
-            content_type=_image_content_type(image.gcs_object),
-            timeout=600,
+    raw_bytes = context.store.read_bytes(asset.target_path)
+    image = _normalize_bytes(asset, raw_bytes, asset.target_path, is_forced_inverted(asset, context.overrides))
+    if image.target_path != asset.target_path:
+        context.store.write_bytes(
+            image.target_path,
+            invert_image(raw_bytes, asset.target_path),
+            content_type=_image_content_type(image.target_path),
         )
     append_event(context.ledger_path, image_normalized(image))
     return 1
@@ -152,10 +148,10 @@ def normalize_pdf_asset(
     asset: PdfAsset,
 ) -> int:
     """Render one PDF and store its presentation/OCR image assets."""
-    pdf_bytes = context.bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
+    pdf_bytes = context.store.read_bytes(asset.target_path)
     created = 0
     for image, image_bytes in iter_pdf_image_assets(context.config, asset, pdf_bytes, context.overrides):
-        store_pdf_image(context.bucket, context.storage_client, image, image_bytes)
+        store_pdf_image(context.store, image, image_bytes)
         append_event(context.ledger_path, image_normalized(image))
         created += 1
     append_event(context.ledger_path, image_normalized(asset))
@@ -181,18 +177,17 @@ def pdf_image_asset(config: PipelineConfig, asset: PdfAsset, filename: str) -> I
         issue_id=asset.document_id,
         page_id=PurePosixPath(filename).stem,
         source_url=asset.source_url,
-        gcs_object=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
+        target_path=f"{config.target.images_prefix}/{asset.document_id}/{filename}",
         issue_label=asset.document_id,
     )
 
 
-def store_pdf_image(bucket: storage.Bucket, client: storage.Client, image: ImageAsset, image_bytes: bytes) -> None:
+def store_pdf_image(store: TargetStore, image: ImageAsset, image_bytes: bytes) -> None:
     """Upload a rendered image exactly once, applying inversion when required."""
-    blob = bucket.blob(image.gcs_object)
-    if blob.exists(client):
+    if store.inspect(image.target_path) is not None:
         return
-    output = invert_image(image_bytes, image.gcs_object) if image.inverted else image_bytes
-    blob.upload_from_string(output, content_type=_image_content_type(image.gcs_object), timeout=600)
+    output = invert_image(image_bytes, image.target_path) if image.inverted else image_bytes
+    store.write_bytes(image.target_path, output, content_type=_image_content_type(image.target_path))
 
 
 def summarize_normalization(results: Iterator[NormalizationSummary]) -> NormalizationSummary:
@@ -215,9 +210,9 @@ def _source_id(asset: SourceAsset) -> str:
     return asset.document_id if isinstance(asset, PdfAsset) else asset.issue_id
 
 
-def load_inversion_overrides(ledger_path: Path) -> InversionOverrides:
+def load_inversion_overrides(ledger_path: Path, expected_config_sha256: str | None = None) -> InversionOverrides:
     """Read explicit review decisions once before normalising a batch."""
-    events = tuple(read_events(ledger_path))
+    events = tuple(read_events(ledger_path, expected_config_sha256))
     return InversionOverrides(
         source_ids=frozenset(event.asset_key for event in events if event.event == "source_inverted"),
         image_keys=frozenset(event.asset_key for event in events if event.event == "image_inverted"),
@@ -241,7 +236,7 @@ def _normalize_bytes(asset: ImageAsset, data: bytes, filename: str, forced_inver
         issue_id=asset.issue_id,
         page_id=f"{asset.page_id}-inverted",
         source_url=asset.source_url,
-        gcs_object=str(PurePosixPath(asset.gcs_object).with_name(f"{stem}-inverted{suffix}")),
+        target_path=str(PurePosixPath(asset.target_path).with_name(f"{stem}-inverted{suffix}")),
         width=asset.width,
         height=asset.height,
         issue_label=asset.issue_label,

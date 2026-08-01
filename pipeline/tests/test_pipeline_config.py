@@ -1,8 +1,9 @@
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 
-from vie_doc_pipeline.config import UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, load_config
+from vie_doc_pipeline.config import LocalTarget, SourceRequestsConfig, UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, parse_source_requests, parse_target, load_config
 
 
 class PipelineConfigTest(unittest.TestCase):
@@ -23,6 +24,24 @@ class PipelineConfigTest(unittest.TestCase):
                 extra_urls=("extra.pdf",),
             ),
         )
+
+    def test_parse_target_supports_local_root(self) -> None:
+        self.assertEqual(
+            parse_target({"type": "local", "root": "out/preview", "images_prefix": "pages"}),
+            LocalTarget(root="out/preview", images_prefix="pages"),
+        )
+
+    def test_parse_source_requests_uses_explicit_request_names(self) -> None:
+        self.assertEqual(
+            parse_source_requests({"max_concurrent_requests": 2, "min_interval_seconds": 1.0}),
+            SourceRequestsConfig(max_concurrent_requests=2, min_interval_seconds=1.0),
+        )
+
+    def test_loaded_config_carries_exact_toml_fingerprint(self) -> None:
+        config = load_config("nlv-cuu-quoc", "sources")
+        toml_bytes = Path("sources/nlv-cuu-quoc.toml").read_bytes()
+
+        self.assertEqual(config.config_sha256, hashlib.sha256(toml_bytes).hexdigest())
 
     def test_rejects_invalid_source_date(self) -> None:
         with self.assertRaisesRegex(ValueError, "source.from_date"):
@@ -50,7 +69,8 @@ class PipelineConfigTest(unittest.TestCase):
 [publication]
 id = "example"
 name = "Example"
-[gcs]
+[target]
+type = "gcs"
 project = "project"
 bucket = "bucket"
 pdf_prefix = "pdf"

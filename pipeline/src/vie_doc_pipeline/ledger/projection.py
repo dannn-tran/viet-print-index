@@ -40,6 +40,8 @@ def project_current(events: list[LedgerEvent]) -> CurrentState:
     """Project latest successful lifecycle state while retaining last failures."""
     states: CurrentState = {}
     for event in events:
+        if event.event == "ledger_initialized":
+            continue
         state = states.setdefault(event.asset_key, CurrentAssetState())
         if event.event == "failed":
             states[event.asset_key] = replace(state, failure=_failure_from_event(event))
@@ -62,8 +64,8 @@ def project_current(events: list[LedgerEvent]) -> CurrentState:
     return states
 
 
-def load_current(path: Path) -> CurrentState:
-    return project_current(read_events(path))
+def load_current(path: Path, expected_config_sha256: str | None = None) -> CurrentState:
+    return project_current(read_events(path, expected_config_sha256))
 
 
 def assets_at(current: CurrentState, event: str) -> list[CurrentAssetState]:

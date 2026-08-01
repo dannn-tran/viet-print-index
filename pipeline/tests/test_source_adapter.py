@@ -3,7 +3,7 @@ from itertools import islice
 import unittest
 from unittest.mock import patch
 
-from vie_doc_pipeline.config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
+from vie_doc_pipeline.config import GcsTarget, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.sources.http import encode_url
 from vie_doc_pipeline.sources.factory import open_source_items
@@ -34,7 +34,7 @@ class SourceAdapterTest(unittest.TestCase):
 
         pipeline_config = PipelineConfig(
             publication=PublicationConfig("pub", "Publication"),
-            gcs=GcsConfig("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
+            target=GcsTarget("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
             source=config,
             explode=ExplodeParams(),
             ocr=OcrConfig(),
@@ -55,7 +55,7 @@ class SourceAdapterTest(unittest.TestCase):
     def test_factory_opens_and_closes_http_only_for_network_discovery(self) -> None:
         config = PipelineConfig(
             publication=PublicationConfig("pub", "Publication"),
-            gcs=GcsConfig("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
+            target=GcsTarget("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
             source=VeridianSource(
                 "https://example.test/catalogue",
                 "https://example.test/images",
@@ -72,7 +72,7 @@ class SourceAdapterTest(unittest.TestCase):
             with open_source_items(config) as source_items:
                 self.assertEqual(len(list(islice(source_items.iter_source_items(), 1))), 1)
 
-        open_http.assert_called_once_with(config.acquisition)
+        open_http.assert_called_once_with(config.source_requests)
         self.assertTrue(http.closed)
 
 

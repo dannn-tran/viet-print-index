@@ -1,4 +1,4 @@
-"""Thread-safe HTTP acquisition backed by urllib3 resilience primitives."""
+"""Thread-safe source HTTP requests backed by urllib3 resilience primitives."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import urllib3
 from urllib3.exceptions import HTTPError, MaxRetryError
 from urllib3.util import Retry, Timeout
 
-from vie_doc_pipeline.config import AcquisitionConfig
+from vie_doc_pipeline.config import SourceRequestsConfig
 
 _CHARSET_RE = re.compile(r"charset=([^; ]+)", re.IGNORECASE)
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -59,12 +59,12 @@ class RequestGate:
 class HttpClient:
     """Shared GET client: rate-gated attempts plus urllib3 retry semantics."""
 
-    def __init__(self, policy: AcquisitionConfig) -> None:
+    def __init__(self, policy: SourceRequestsConfig) -> None:
         self.policy = policy
-        self.gate = RequestGate(policy.min_request_interval_seconds)
+        self.gate = RequestGate(policy.min_interval_seconds)
         self.pool = urllib3.PoolManager(
-            maxsize=policy.max_workers,
-            num_pools=policy.max_workers,
+            maxsize=policy.max_concurrent_requests,
+            num_pools=policy.max_concurrent_requests,
             timeout=Timeout(connect=10, read=60),
             headers={"User-Agent": "vie-pipeline/1.0 (research ingestion)"},
         )
@@ -122,11 +122,11 @@ class HttpClient:
             raise TransientSourceError(url, len(retry.history) + 1, exhausted.reason) from exhausted
 
 
-def http_client(policy: AcquisitionConfig) -> HttpClient:
+def http_client(policy: SourceRequestsConfig) -> HttpClient:
     return HttpClient(policy)
 
 
-def retry_policy(policy: AcquisitionConfig) -> Retry:
+def retry_policy(policy: SourceRequestsConfig) -> Retry:
     """Build the immutable urllib3 retry policy used for every request."""
     retries = policy.max_attempts - 1
     return Retry(
