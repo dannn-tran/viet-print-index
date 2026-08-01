@@ -21,9 +21,10 @@ class JsonlStateStoreTest(unittest.TestCase):
             )
             store.record_discovered(asset)
             store.record_fetched(asset, checksum="abc123", size_bytes=100)
+            store.record_materialized(asset)
             store.record_ocr_submitted([asset.key], job_id="operation-1", output_prefix="gs://bucket/ocr/batch-0")
 
             lines = path.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(len(lines), 3)
+            self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "discovered")
             self.assertEqual(store.current()[asset.key]["job_id"], "operation-1")
