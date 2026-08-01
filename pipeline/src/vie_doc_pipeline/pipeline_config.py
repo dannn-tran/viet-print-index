@@ -1,4 +1,5 @@
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -68,62 +69,78 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
-    pub = raw["publication"]
-    gcs = raw["gcs"]
-    src = raw.get("source", {})
-    exp = raw.get("explode", {})
-    ocr = raw.get("ocr", {})
-    acquisition = raw.get("acquisition", {})
-
-    src_range = src.get("range")
     config = PipelineConfig(
-        publication=PublicationConfig(
-            id=pub["id"],
-            name=pub["name"],
-        ),
-        gcs=GcsConfig(
-            project=gcs["project"],
-            bucket=gcs["bucket"],
-            pdf_prefix=gcs["pdf_prefix"].rstrip("/"),
-            images_prefix=gcs["images_prefix"].rstrip("/"),
-            ocr_output_prefix=gcs["ocr_output_prefix"].rstrip("/"),
-        ),
-        source=SourceConfig(
-            type=src.get("type", "local_dir"),
-            page_url=src.get("page_url"),
-            base_url=src.get("base_url"),
-            pattern=src.get("pattern"),
-            range=tuple(src_range) if src_range else None,
-            urls=src.get("urls", []),
-            path=src.get("path"),
-            catalogue_url=src.get("catalogue_url"),
-            image_server_url=src.get("image_server_url"),
-            title_id=src.get("title_id"),
-            from_date=src.get("from_date"),
-            to_date=src.get("to_date"),
-        ),
-        explode=ExplodeParams(
-            negate_png=exp.get("negate_png", False),
-            preserve_crop=exp.get("preserve_crop", False),
-            preserve_orientation=exp.get("preserve_orientation", False),
-            no_annotations=exp.get("no_annotations", False),
-            no_text=exp.get("no_text", False),
-            dpi=exp.get("dpi", 300),
-        ),
-        ocr=OcrConfig(
-            language_hints=tuple(ocr.get("language_hints", [])),
-        ),
-        acquisition=AcquisitionConfig(
-            max_workers=int(acquisition.get("max_workers", 4)),
-            min_request_interval_seconds=float(acquisition.get("min_request_interval_seconds", 0.0)),
-            max_attempts=int(acquisition.get("max_attempts", 5)),
-            backoff_factor=float(acquisition.get("backoff_factor", 1.0)),
-            backoff_max_seconds=float(acquisition.get("backoff_max_seconds", 30.0)),
-            backoff_jitter_seconds=float(acquisition.get("backoff_jitter_seconds", 0.5)),
-        ),
+        publication=parse_publication(raw["publication"]),
+        gcs=parse_gcs(raw["gcs"]),
+        source=parse_source(raw.get("source", {})),
+        explode=parse_explode(raw.get("explode", {})),
+        ocr=parse_ocr(raw.get("ocr", {})),
+        acquisition=parse_acquisition(raw.get("acquisition", {})),
     )
     _validate_config(config)
     return config
+
+
+def parse_publication(raw: Mapping[str, object]) -> PublicationConfig:
+    return PublicationConfig(id=str(raw["id"]), name=str(raw["name"]))
+
+
+def parse_gcs(raw: Mapping[str, object]) -> GcsConfig:
+    return GcsConfig(
+        project=str(raw["project"]),
+        bucket=str(raw["bucket"]),
+        pdf_prefix=str(raw["pdf_prefix"]).rstrip("/"),
+        images_prefix=str(raw["images_prefix"]).rstrip("/"),
+        ocr_output_prefix=str(raw["ocr_output_prefix"]).rstrip("/"),
+    )
+
+
+def parse_source(raw: Mapping[str, object]) -> SourceConfig:
+    source_range = raw.get("range")
+    return SourceConfig(
+        type=str(raw.get("type", "local_dir")),
+        page_url=optional_string(raw.get("page_url")),
+        base_url=optional_string(raw.get("base_url")),
+        pattern=optional_string(raw.get("pattern")),
+        range=tuple(source_range) if source_range else None,  # type: ignore[arg-type]
+        urls=list(raw.get("urls", [])),  # type: ignore[arg-type]
+        path=optional_string(raw.get("path")),
+        catalogue_url=optional_string(raw.get("catalogue_url")),
+        image_server_url=optional_string(raw.get("image_server_url")),
+        title_id=optional_string(raw.get("title_id")),
+        from_date=optional_string(raw.get("from_date")),
+        to_date=optional_string(raw.get("to_date")),
+    )
+
+
+def parse_explode(raw: Mapping[str, object]) -> ExplodeParams:
+    return ExplodeParams(
+        negate_png=bool(raw.get("negate_png", False)),
+        preserve_crop=bool(raw.get("preserve_crop", False)),
+        preserve_orientation=bool(raw.get("preserve_orientation", False)),
+        no_annotations=bool(raw.get("no_annotations", False)),
+        no_text=bool(raw.get("no_text", False)),
+        dpi=int(raw.get("dpi", 300)),
+    )
+
+
+def parse_ocr(raw: Mapping[str, object]) -> OcrConfig:
+    return OcrConfig(language_hints=tuple(raw.get("language_hints", [])))  # type: ignore[arg-type]
+
+
+def parse_acquisition(raw: Mapping[str, object]) -> AcquisitionConfig:
+    return AcquisitionConfig(
+        max_workers=int(raw.get("max_workers", 4)),
+        min_request_interval_seconds=float(raw.get("min_request_interval_seconds", 0.0)),
+        max_attempts=int(raw.get("max_attempts", 5)),
+        backoff_factor=float(raw.get("backoff_factor", 1.0)),
+        backoff_max_seconds=float(raw.get("backoff_max_seconds", 30.0)),
+        backoff_jitter_seconds=float(raw.get("backoff_jitter_seconds", 0.5)),
+    )
+
+
+def optional_string(value: object | None) -> str | None:
+    return str(value) if value is not None else None
 
 
 def _validate_config(config: PipelineConfig) -> None:

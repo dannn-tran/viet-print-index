@@ -71,41 +71,39 @@ class HttpClient:
 
     def fetch_bytes(self, url: str) -> bytes:
         encoded_url = encode_url(url)
-        retry = Retry(
-            total=self.policy.max_attempts - 1,
-            connect=self.policy.max_attempts - 1,
-            read=self.policy.max_attempts - 1,
-            status=self.policy.max_attempts - 1,
-            other=0,
-            allowed_methods=frozenset({"GET"}),
-            status_forcelist=_RETRY_STATUSES,
-            backoff_factor=self.policy.backoff_factor,
-            backoff_max=self.policy.backoff_max_seconds,
-            backoff_jitter=self.policy.backoff_jitter_seconds,
-            respect_retry_after_header=True,
-            raise_on_status=False,
-        )
+        retry = retry_policy(self.policy)
         while True:
-            self.gate.wait_for_turn()
             try:
-                response = self.pool.request("GET", encoded_url, retries=False, preload_content=True)
+                response = self.request_once(encoded_url)
             except HTTPError as error:
-                retry = self._next_retry(retry, encoded_url, error=error)
-                retry.sleep()
+                retry = self.retry_after_error(retry, encoded_url, error)
                 continue
             if retry.is_retry("GET", response.status, "retry-after" in response.headers):
-                try:
-                    retry = self._next_retry(retry, encoded_url, response=response)
-                finally:
-                    response.release_conn()
-                retry.sleep(response)
+                retry = self.retry_after_response(retry, encoded_url, response)
                 continue
-            try:
-                if response.status >= 400:
-                    raise SourceHttpError(url, response.status)
-                return response.data
-            finally:
-                response.release_conn()
+            return response_data(url, response)
+
+    def request_once(self, url: str) -> urllib3.BaseHTTPResponse:
+        """Make one rate-gated GET attempt; retry policy remains explicit above."""
+        self.gate.wait_for_turn()
+        return self.pool.request("GET", url, retries=False, preload_content=True)
+
+    def retry_after_error(self, retry: Retry, url: str, error: HTTPError) -> Retry:
+        """Advance retry state and pause after a transport failure."""
+        next_retry = self._next_retry(retry, url, error=error)
+        next_retry.sleep()
+        return next_retry
+
+    def retry_after_response(
+        self, retry: Retry, url: str, response: urllib3.BaseHTTPResponse
+    ) -> Retry:
+        """Advance retry state, release the response, and honour its retry delay."""
+        try:
+            next_retry = self._next_retry(retry, url, response=response)
+        finally:
+            response.release_conn()
+        next_retry.sleep(response)
+        return next_retry
 
     def fetch_text(self, url: str) -> str:
         data = self.fetch_bytes(url)
@@ -126,6 +124,35 @@ class HttpClient:
 
 def http_client(policy: AcquisitionConfig) -> HttpClient:
     return HttpClient(policy)
+
+
+def retry_policy(policy: AcquisitionConfig) -> Retry:
+    """Build the immutable urllib3 retry policy used for every request."""
+    retries = policy.max_attempts - 1
+    return Retry(
+        total=retries,
+        connect=retries,
+        read=retries,
+        status=retries,
+        other=0,
+        allowed_methods=frozenset({"GET"}),
+        status_forcelist=_RETRY_STATUSES,
+        backoff_factor=policy.backoff_factor,
+        backoff_max=policy.backoff_max_seconds,
+        backoff_jitter=policy.backoff_jitter_seconds,
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+
+
+def response_data(url: str, response: urllib3.BaseHTTPResponse) -> bytes:
+    """Return a successful response body while always releasing its connection."""
+    try:
+        if response.status >= 400:
+            raise SourceHttpError(url, response.status)
+        return response.data
+    finally:
+        response.release_conn()
 
 
 def encode_url(url: str) -> str:
