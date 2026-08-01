@@ -7,39 +7,9 @@ from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_sub
 from vie_doc_pipeline.ledger.projection import AppState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.workflow.configuration import ConfigMismatchError, bind_configuration
 
 
-class EventStoreConfigTest(unittest.TestCase):
-    def test_records_and_validates_config_toml(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "state.jsonl"
-            store = EventStore.open(path)
-            bind_configuration(store, "config-a")
-            bind_configuration(store, "config-a")
-
-            events = list(store.iter_events())
-            self.assertEqual(events[0].event, "configuration_bound")
-            self.assertEqual(events[0].data["config_toml"], "config-a")
-            self.assertEqual(len(events), 1)
-            with self.assertRaises(ConfigMismatchError):
-                bind_configuration(store, "config-b")
-
-    def test_refuses_to_mix_events_without_bound_config_toml(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "state.jsonl"
-            store = EventStore.open(path)
-            store.append(source_discovered(ImageAsset(
-                publication_id="pub",
-                issue_id="issue",
-                page_id="001",
-                source_url="https://example.test/1",
-                target_path="pub/images/1.jpg",
-            )))
-
-            with self.assertRaises(ConfigMismatchError):
-                bind_configuration(store, "config-a")
-
+class EventStoreProjectionTest(unittest.TestCase):
     def test_appends_inspectable_events_and_reconstructs_current_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"

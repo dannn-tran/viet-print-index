@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 import typer
 
 from vie_doc_pipeline.logging import configure_logging
-from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
+from vie_doc_pipeline.ledger.events import configuration_bound, image_inverted, source_inverted
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
@@ -15,7 +15,6 @@ from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.fetch_source import fetch_source_assets
-from vie_doc_pipeline.workflow.configuration import bind_configuration
 from vie_doc_pipeline.workflow.normalize_images import (
     AllNormalizationCandidates,
     ImageNormalizationCandidates,
@@ -39,11 +38,38 @@ _Limit = Annotated[Optional[int], typer.Option(help="Process only first N items"
 _StatePath = Annotated[Optional[Path], typer.Option("--state-path", help="Event-store state path")]
 
 
+class _ConfigurationMismatchError(ValueError):
+    """Raised when an event store belongs to another configuration."""
+
+
 def _resolve_state_path(config_path: Path, state_path: Path | None) -> Path:
     """Resolve the CLI's state-file override or its derived default."""
     if state_path is not None:
         return state_path
     return Path(".pipeline-state") / "v2" / f"{config_path.stem}.jsonl"
+
+
+def _bind_configuration(event_store: EventStore, config_toml: str | None) -> None:
+    """Bind the CLI run to the event store's initial TOML configuration."""
+    if config_toml is None:
+        return
+
+    first = event_store.first_event()
+    if first is None:
+        event_store.append(configuration_bound(config_toml))
+        return
+
+    if first.event != "configuration_bound":
+        raise _ConfigurationMismatchError(
+            "Event store has no bound TOML configuration as its first event",
+        )
+    recorded = first.data.get("config_toml")
+    if not isinstance(recorded, str):
+        raise _ConfigurationMismatchError("Event store contains no TOML configuration")
+    if recorded != config_toml:
+        raise _ConfigurationMismatchError(
+            "Event store belongs to a different TOML configuration",
+        )
 
 
 @app.command()
@@ -55,7 +81,7 @@ def status(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     current = AppState.replay(event_store).current
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
@@ -75,7 +101,7 @@ def source_discover(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     assets = discover_source_assets(config, event_store, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"State file  : {state_path}")
@@ -91,7 +117,7 @@ def source_fetch(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     summary = fetch_source_assets(config, event_store, limit=limit)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
@@ -112,7 +138,7 @@ def images_normalize(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     state = AppState.replay(event_store)
     selection = normalization_selection(source_id, image_id)
     if inverted:
@@ -149,7 +175,7 @@ def images_review(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     current = AppState.replay(event_store).current
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
@@ -185,7 +211,7 @@ def ocr_submit_jobs(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     summary = submit_ocr_jobs(config, event_store, limit=limit)
     print(f"Submitted   : {summary.submitted} images")
     print(f"State file  : {state_path}")
@@ -200,7 +226,7 @@ def ocr_check_status(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    bind_configuration(event_store, config.config_toml)
+    _bind_configuration(event_store, config.config_toml)
     summary = check_ocr_status(config, event_store)
     print(f"Completed   : {summary.completed} images")
     print(f"Pending     : {summary.pending} images")
