@@ -79,12 +79,25 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 
 All commands run from the repo root. Replace `<pub-id>` with a publication ID from the table above.
 
-### Choose the workflow by source type
+### Preferred staged workflow
 
-| Source type | Workflow | Notes |
-|-------------|----------|-------|
-| `web_page`, `url_sequence`, `url_list`, or `local_dir` | `ingest → explode → run-ocr → index` | PDF-based workflow. `run-ocr` is the legacy blocking command. |
-| `veridian` | `discover → fetch → ocr submit → ocr reconcile → index` | Native full-page-image workflow, recorded in an append-only JSONL ledger. `discover` and `fetch` currently support only this source type. |
+All source types use the same resumable workflow, backed by an append-only
+JSONL ledger at `.pipeline-state/<pub>.jsonl`:
+
+```sh
+vie-pipeline discover <pub-id>      # find source PDFs or native page images
+vie-pipeline fetch <pub-id>         # store source assets in GCS
+vie-pipeline materialize <pub-id>   # explode PDFs; record native images in place
+vie-pipeline ocr submit <pub-id>    # submit only materialized page images
+vie-pipeline ocr reconcile <pub-id> # check asynchronous OCR outputs
+```
+
+`materialize` never copies image-native sources: their fetched GCS object is
+recorded directly as the OCR-ready page. PDF sources create page images under
+`<pub>/images/` at this step. Index OCR after reconciliation with `vpi index gcs`.
+
+`ingest`, `explode`, and `run-ocr` remain as legacy commands for existing
+collections; use the staged workflow for all new work.
 
 ### 1. Ingest PDFs → GCS
 
@@ -131,17 +144,19 @@ vie-pipeline status <pub-id>
 ### National Library of Vietnam / Veridian sources
 
 Some sources use the National Library of Vietnam's Veridian viewer rather
-than PDFs. These sources fetch full native page JPEGs directly into the images
-prefix, so they skip the `ingest` and `explode` steps. Their OCR workflow is
-asynchronous and state-backed.
+than PDFs. It is an image-native source and therefore follows the same staged
+workflow as every other source. Its `materialize` stage records each fetched
+full-page JPEG in place, without creating a second image object.
 
 ```sh
 # Discover full-page assets into an inspectable state ledger
 vie-pipeline discover nlv-cuu-quoc --limit 10
 
-# Fetch only discovered-but-unfetched pages. Existing GCS images are recorded
-# into the ledger rather than downloaded again.
+# Fetch only discovered-but-unfetched assets.
 vie-pipeline fetch nlv-cuu-quoc --limit 10
+
+# Native images are marked OCR-ready without copying them.
+vie-pipeline materialize nlv-cuu-quoc
 
 # Submit quickly, then reconcile later. Neither command blocks on long OCR work.
 vie-pipeline ocr submit nlv-cuu-quoc
@@ -278,7 +293,7 @@ images_prefix     = "thanh-nghi/images"
 ocr_output_prefix = "thanh-nghi/ocr"
 
 [source]
-# type options: web_page | url_sequence | url_list | local_dir
+# type options: web_page | url_sequence | url_list | local_dir | veridian
 type     = "url_sequence"
 base_url = "https://www.namkyluctinh.org/eBooks/Tap%20Chi/Thanh%20Nghi"
 pattern  = "{:03d}.pdf"
@@ -286,6 +301,7 @@ range    = [1, 120]
 
 # web_page:    page_url = "http://..."   (scrape PDF hrefs from HTML page)
 # url_list:    urls = ["http://...", ...]
+# url_sequence can also include urls = [...] for combined/irregular issues
 # local_dir:   path = "data/mypub/pdf"
 
 [explode]
