@@ -3,7 +3,7 @@ from typing import Annotated
 import typer
 
 from gc_vision_adapter.ocr.extract import extract_ocr_fulltext
-from vie_doc_pipeline.config.logging import configure_logging
+from vie_doc_pipeline.logging import configure_logging
 
 configure_logging()
 app = typer.Typer()

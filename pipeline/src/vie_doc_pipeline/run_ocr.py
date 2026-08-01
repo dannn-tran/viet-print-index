@@ -5,7 +5,7 @@ import typer
 from gc_vision_adapter.ocr.run import DEFAULT_OCR_INPUT_BATCHSIZE, DEFAULT_OCR_OUTPUT_BATCHSIZE, \
     DEFAULT_OCR_BATCH_PROCESS_TIMEOUT_SECONDS, RunBatchOcrCommand, batch_ocr
 from vie_doc_data.validated import Validated
-from vie_doc_pipeline.config.logging import configure_logging
+from vie_doc_pipeline.logging import configure_logging
 
 configure_logging()
 app = typer.Typer()

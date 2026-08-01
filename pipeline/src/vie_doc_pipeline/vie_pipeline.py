@@ -5,7 +5,7 @@ from collections import Counter
 import typer
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, batch_ocr
-from vie_doc_pipeline.config.logging import configure_logging
+from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.stages.calibrate import run_calibrate
 from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets, materialize_pages
