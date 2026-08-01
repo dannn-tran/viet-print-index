@@ -48,3 +48,17 @@ class EventStoreTest(unittest.TestCase):
 
             self.assertTrue(state.current[asset.key].asset)
             self.assertEqual(len(list(store.iter_events())), 1)
+
+    def test_first_event_reads_only_the_initial_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.jsonl"
+            path.write_text(
+                '{"event":"source_discovered","asset_key":"first","at":"now","data":{}}\n'
+                '{"event":"not_a_real_event","asset_key":"second","at":"now","data":{}}\n',
+                encoding="utf-8",
+            )
+
+            first = EventStore.open(path).first_event()
+
+            self.assertIsNotNone(first)
+            self.assertEqual(first.asset_key if first else None, "first")

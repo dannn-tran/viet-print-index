@@ -41,6 +41,10 @@ class EventStore:
                     raise ValueError(f"Invalid event record at {self._path}:{line_number}") from error
                 yield event
 
+    def first_event(self) -> EventRecord | None:
+        """Return the initial event, or ``None`` when the store is empty."""
+        return next(self.iter_events(), None)
+
     def append(self, event: EventRecord) -> None:
         """Append one event atomically with the store's file lock."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
