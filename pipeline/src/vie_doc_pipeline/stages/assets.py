@@ -31,9 +31,11 @@ def discover_assets(config: PipelineConfig, state: JsonlStateStore, limit: int |
             items = items[:limit]
         assets = [_document_from_item(config, item) for item in items]
 
-    for asset in assets:
+    current = state.current()
+    new_assets = [asset for asset in assets if asset.key not in current]
+    for asset in new_assets:
         state.record_discovered(asset)
-    return assets
+    return new_assets
 
 
 def fetch_assets(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> tuple[int, int]:

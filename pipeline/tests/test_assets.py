@@ -1,12 +1,12 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from vie_doc_pipeline.domain import PageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
 from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
-from vie_doc_pipeline.stages.assets import _document_from_item, materialize_pages
+from vie_doc_pipeline.stages.assets import _document_from_item, discover_assets, materialize_pages
 from vie_doc_pipeline.state import JsonlStateStore
 
 
@@ -46,6 +46,22 @@ class AssetDiscoveryTest(unittest.TestCase):
             self.assertEqual((pages, passthrough), (0, 1))
             self.assertEqual(client.bucket_instance.blob_names, [])
             self.assertEqual(state.current()[asset.key]["event"], "materialized")
+
+    def test_discovery_does_not_overwrite_existing_ledger_state(self) -> None:
+        config = PipelineConfig(
+            publication=PublicationConfig(id="doi-moi", name="Đời Mới"),
+            gcs=GcsConfig("project", "bucket", "doi-moi/pdf", "doi-moi/images", "doi-moi/ocr"),
+            source=SourceConfig(type="url_list", urls=["https://example.test/001.pdf"]),
+            explode=ExplodeParams(),
+            ocr=OcrConfig(),
+        )
+        with TemporaryDirectory() as directory:
+            state = JsonlStateStore(Path(directory) / "state.jsonl")
+            adapter = Mock()
+            adapter.list_pdf_items.return_value = ["https://example.test/001.pdf"]
+            with patch("vie_doc_pipeline.stages.assets.make_adapter", return_value=adapter):
+                self.assertEqual(len(discover_assets(config, state)), 1)
+                self.assertEqual(discover_assets(config, state), [])
 
 
 class _FakeBucket:
