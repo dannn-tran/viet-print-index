@@ -12,7 +12,7 @@ from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_availab
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.config.models import PipelineConfig
 from vie_doc_pipeline.domain.results import OcrStatusSummary, OcrSubmissionSummary
 
 

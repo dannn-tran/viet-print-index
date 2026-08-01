@@ -21,3 +21,14 @@ def acquisition_lock(ledger_path: Path) -> Iterator[None]:
             yield
         finally:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def ledger_write_lock(path: Path) -> Iterator[None]:
+    """Hold the advisory lock used while appending one ledger event."""
+    with path.open("a", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)

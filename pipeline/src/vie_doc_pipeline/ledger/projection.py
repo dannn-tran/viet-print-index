@@ -7,7 +7,8 @@ from pathlib import Path
 import time
 
 from vie_doc_pipeline.ledger.jsonl import read_events
-from vie_doc_pipeline.models import LedgerEvent, SourceAsset, source_asset_from_dict
+from vie_doc_pipeline.ledger.models import LedgerEvent
+from vie_doc_pipeline.models import SourceAsset, source_asset_from_dict
 
 
 @dataclass(frozen=True)

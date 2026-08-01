@@ -26,6 +26,13 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 
 Two toolchains, one contract. GCS is the durable store and the handoff point between them.
 
+The Python package keeps the workflow boundaries visible: `config/` decodes TOML
+into typed values, `sources/` owns source-specific discovery factories and HTTP
+adapters, `domain/` owns asset identity and stage result values, `images/` owns
+PDF/image transformations, `ledger/` owns JSONL persistence and projection, and
+`workflow/` owns the staged orchestration. External clients are created and
+closed by the stage or provider that owns their lifetime.
+
 | Toolchain | Responsibilities |
 |-----------|-----------------|
 | **Python** (`vie-pipeline`) | Acquire source assets, normalize durable presentation/OCR images, manage GCV OCR jobs |

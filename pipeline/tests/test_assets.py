@@ -9,8 +9,8 @@ from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.images.pdf import ExplodeParams
-from vie_doc_pipeline.pipeline_config import (
+from vie_doc_pipeline.config.models import (
+    ExplodeParams,
     GcsConfig,
     OcrConfig,
     PipelineConfig,
@@ -19,7 +19,7 @@ from vie_doc_pipeline.pipeline_config import (
     VeridianSource,
     WebPagePdfSource,
 )
-from vie_doc_pipeline.workflow.assets import asset_from_source_item
+from vie_doc_pipeline.domain.assets import asset_from_source_item
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.normalize_images import normalize_images
 
@@ -64,6 +64,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             self.assertEqual(summary.native_registered, 1)
             self.assertEqual(client.bucket_instance.uploads, [])
             self.assertEqual(load_current(ledger_path)[asset.key].event, "image_normalized")
+            self.assertTrue(client.closed)
 
     def test_native_image_path_prefers_human_issue_label(self) -> None:
         config = PipelineConfig(
@@ -141,9 +142,13 @@ class _FakeBlob:
 class _FakeStorageClient:
     def __init__(self) -> None:
         self.bucket_instance = _FakeBucket()
+        self.closed = False
 
     def bucket(self, name: str) -> _FakeBucket:
         return self.bucket_instance
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class _FakeSourceItemProvider:

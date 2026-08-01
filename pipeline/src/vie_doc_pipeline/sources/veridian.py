@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
-from vie_doc_pipeline.pipeline_config import VeridianSource
+from vie_doc_pipeline.config.models import VeridianSource
 from vie_doc_pipeline.sources.http import HttpClient
 
 logger = logging.getLogger(__name__)

@@ -60,3 +60,11 @@ class JsonlLedgerTest(unittest.TestCase):
             append_event(path, failed(asset.key, stage="download", error="timeout"))
             append_event(path, source_downloaded(asset, checksum="checksum", size_bytes=10))
             self.assertIsNone(load_current(path)[asset.key].failure)
+
+    def test_rejects_unknown_event_shape_at_jsonl_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            path.write_text('{"event":"future_event","asset_key":"asset","at":"now","data":{}}\n', encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "Invalid ledger event"):
+                read_events(path)

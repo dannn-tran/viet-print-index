@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, load_config
+from vie_doc_pipeline.config import UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, load_config
 
 
 class PipelineConfigTest(unittest.TestCase):

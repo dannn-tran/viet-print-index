@@ -12,7 +12,7 @@ from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import ImageAsset
-from vie_doc_pipeline.pipeline_config import load_config
+from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.download_source import download_source_assets
@@ -144,7 +144,12 @@ def images_calibrate(
     out_dir: Annotated[Optional[Path], typer.Option(help="Output directory")] = None,
 ) -> None:
     """Inspect PDF-to-image variants for a representative source asset."""
-    run_image_calibration(load_config(pub_id, config_dir), pdf, out_dir)
+    summary = run_image_calibration(load_config(pub_id, config_dir), pdf, out_dir)
+    for variant in summary.variants:
+        print(f"  {variant.name}: {variant.image_count} images → {variant.output_dir}")
+    print("\nHeuristic suggestions for [explode] in your TOML:" if summary.hints else "\nNo heuristic hints. Try render variants.")
+    for hint in summary.hints:
+        print(f"  {hint}")
 
 
 @ocr_app.command("submit-jobs")

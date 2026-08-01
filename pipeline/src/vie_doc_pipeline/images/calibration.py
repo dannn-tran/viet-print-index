@@ -4,8 +4,10 @@ from pathlib import Path
 
 import fitz
 
-from vie_doc_pipeline.images.pdf import ExplodeParams, explode_pdf_bytes
-from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.images.pdf import explode_pdf_bytes
+from vie_doc_pipeline.config.models import ExplodeParams
+from vie_doc_pipeline.config.models import PipelineConfig
+from vie_doc_pipeline.domain.results import CalibrationSummary, CalibrationVariantSummary
 
 _VARIANTS: list[tuple[str, ExplodeParams]] = [
     ("raw", ExplodeParams()),
@@ -16,35 +18,37 @@ _VARIANTS: list[tuple[str, ExplodeParams]] = [
 ]
 
 
-def run_image_calibration(config: PipelineConfig, pdf_path: Path, out_dir: Path | None = None) -> None:
+def run_image_calibration(config: PipelineConfig, pdf_path: Path, out_dir: Path | None = None) -> CalibrationSummary:
     if not pdf_path.exists():
         raise FileNotFoundError(pdf_path)
     base = out_dir or Path("calibrate") / config.publication.id / pdf_path.stem
     pdf_bytes = pdf_path.read_bytes()
+    variants: list[CalibrationVariantSummary] = []
     for variant_name, params in _VARIANTS:
         images = explode_pdf_bytes(pdf_bytes, params)
         variant_dir = base / variant_name
         variant_dir.mkdir(parents=True, exist_ok=True)
         for filename, data in images:
             (variant_dir / filename).write_bytes(data)
-        print(f"  {variant_name}: {len(images)} images → {variant_dir}")
-    _print_hints(pdf_bytes)
+        variants.append(CalibrationVariantSummary(variant_name, len(images), str(variant_dir)))
+    return CalibrationSummary(tuple(variants), tuple(_hints(pdf_bytes)))
 
 
-def _print_hints(pdf_bytes: bytes) -> None:
+def _hints(pdf_bytes: bytes) -> list[str]:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    hints: list[str] = []
-    if any(len(page.get_text().strip()) > 50 for page in doc):
-        hints.append("no_text = true  (digital text layer detected)")
-    if (sample := _render_first_page(doc)) and _mean_brightness(sample) < 50:
-        hints.append("negate_png = true  (dark background detected)")
-    if any(page.rotation != 0 for page in doc):
-        hints.append("preserve_orientation = true  (rotated pages detected)")
-    if any(page.cropbox != page.mediabox for page in doc):
-        hints.append("preserve_crop = true  (crop box differs from media box)")
-    print("\nHeuristic suggestions for [explode] in your TOML:" if hints else "\nNo heuristic hints. Try render variants.")
-    for hint in hints:
-        print(f"  {hint}")
+    try:
+        hints: list[str] = []
+        if any(len(page.get_text().strip()) > 50 for page in doc):
+            hints.append("no_text = true  (digital text layer detected)")
+        if (sample := _render_first_page(doc)) and _mean_brightness(sample) < 50:
+            hints.append("negate_png = true  (dark background detected)")
+        if any(page.rotation != 0 for page in doc):
+            hints.append("preserve_orientation = true  (rotated pages detected)")
+        if any(page.cropbox != page.mediabox for page in doc):
+            hints.append("preserve_crop = true  (crop box differs from media box)")
+        return hints
+    finally:
+        doc.close()
 
 
 def _render_first_page(doc: fitz.Document) -> bytes | None:

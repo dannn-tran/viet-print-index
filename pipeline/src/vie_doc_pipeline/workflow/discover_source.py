@@ -3,12 +3,12 @@
 from pathlib import Path
 from itertools import islice
 
-from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.sources.discover import open_source_items
+from vie_doc_pipeline.config.models import PipelineConfig
+from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.ledger.jsonl import append_event
-from vie_doc_pipeline.workflow.assets import SourceAsset, asset_from_source_item
+from vie_doc_pipeline.domain.assets import SourceAsset, asset_from_source_item
 
 
 def discover_source_assets(

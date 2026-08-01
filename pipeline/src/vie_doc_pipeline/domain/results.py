@@ -26,3 +26,16 @@ class OcrStatusSummary:
 @dataclass(frozen=True)
 class OcrSubmissionSummary:
     submitted: int = 0
+
+
+@dataclass(frozen=True)
+class CalibrationVariantSummary:
+    name: str
+    image_count: int
+    output_dir: str
+
+
+@dataclass(frozen=True)
+class CalibrationSummary:
+    variants: tuple[CalibrationVariantSummary, ...] = ()
+    hints: tuple[str, ...] = ()

@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Literal
 
-from vie_doc_pipeline.models import LedgerEvent, SourceAsset, utc_now
+from vie_doc_pipeline.ledger.models import LedgerEvent
+from vie_doc_pipeline.models import SourceAsset, utc_now
 
 Asset = SourceAsset
 

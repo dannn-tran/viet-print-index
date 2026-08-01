@@ -6,7 +6,7 @@ import urllib.parse
 from pathlib import PurePosixPath
 
 from vie_doc_pipeline.models import DiscoveredSourceItem, ImageAsset, PdfAsset, SourceAsset
-from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.config.models import PipelineConfig
 
 def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
     if item.kind == "image":

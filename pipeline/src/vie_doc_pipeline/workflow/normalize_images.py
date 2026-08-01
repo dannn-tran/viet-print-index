@@ -17,7 +17,7 @@ from vie_doc_pipeline.ledger.events import failed, image_normalized
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
-from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.config.models import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
 from vie_doc_pipeline.domain.results import NormalizationSummary
 
@@ -69,13 +69,16 @@ def normalize_images(
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
     client = storage.Client(project=config.gcs.project)
-    bucket = client.bucket(config.gcs.bucket)
-    current = load_current(ledger_path)
-    overrides = load_inversion_overrides(ledger_path)
-    assets = iter_normalization_candidates(current, selection, limit)
-    context = NormalizationContext(config, ledger_path, bucket, client, overrides)
-    results = (normalize_asset(context, asset) for asset in assets)
-    return summarize_normalization(results)
+    try:
+        bucket = client.bucket(config.gcs.bucket)
+        current = load_current(ledger_path)
+        overrides = load_inversion_overrides(ledger_path)
+        assets = iter_normalization_candidates(current, selection, limit)
+        context = NormalizationContext(config, ledger_path, bucket, client, overrides)
+        results = (normalize_asset(context, asset) for asset in assets)
+        return summarize_normalization(results)
+    finally:
+        client.close()
 
 
 def iter_normalization_candidates(

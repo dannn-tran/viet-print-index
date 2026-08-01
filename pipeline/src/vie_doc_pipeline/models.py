@@ -103,18 +103,3 @@ def source_asset_from_dict(raw: dict[str, object]) -> SourceAsset:
     """Decode one JSONL asset payload at the persistence boundary."""
     return PdfAsset.from_dict(raw) if raw.get("kind") == "pdf" else ImageAsset.from_dict(raw)
 
-
-@dataclass(frozen=True)
-class LedgerEvent:
-    """An append-only transition in the state ledger."""
-
-    event: Literal[
-        "source_discovered", "source_downloaded", "image_normalized",
-        "ocr_job_submitted", "ocr_output_available", "source_inverted", "image_inverted", "failed",
-    ]
-    asset_key: str
-    at: str
-    data: dict[str, object]
-
-    def to_dict(self) -> dict[str, object]:
-        return {"event": self.event, "asset_key": self.asset_key, "at": self.at, "data": self.data}

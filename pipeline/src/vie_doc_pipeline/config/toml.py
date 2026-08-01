@@ -1,88 +1,22 @@
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Literal, TypeAlias
 
-from vie_doc_pipeline.images.pdf import ExplodeParams
-
-
-@dataclass(frozen=True)
-class PublicationConfig:
-    id: str
-    name: str
-
-
-@dataclass(frozen=True)
-class GcsConfig:
-    project: str
-    bucket: str
-    pdf_prefix: str
-    images_prefix: str
-    ocr_output_prefix: str
-
-
-@dataclass(frozen=True)
-class VeridianSource:
-    catalogue_url: str
-    image_server_url: str
-    title_id: str
-    from_date: date
-    to_date: date
-
-
-@dataclass(frozen=True)
-class WebPagePdfSource:
-    page_url: str
-
-
-@dataclass(frozen=True)
-class UrlSequencePdfSource:
-    base_url: str
-    pattern: str
-    issue_range: tuple[int, int]
-    extra_urls: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class UrlListPdfSource:
-    urls: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class LocalPdfSource:
-    path: str
-
-
-SourceConfig: TypeAlias = (
-    VeridianSource | WebPagePdfSource | UrlSequencePdfSource | UrlListPdfSource | LocalPdfSource
+from vie_doc_pipeline.config.models import (
+    AcquisitionConfig,
+    ExplodeParams,
+    GcsConfig,
+    OcrConfig,
+    PipelineConfig,
+    PublicationConfig,
+    SourceConfig,
+    UrlListPdfSource,
+    UrlSequencePdfSource,
+    VeridianSource,
+    WebPagePdfSource,
+    LocalPdfSource,
 )
-
-
-@dataclass(frozen=True)
-class AcquisitionConfig:
-    max_workers: int = 4
-    min_request_interval_seconds: float = 0.0
-    max_attempts: int = 5
-    backoff_factor: float = 1.0
-    backoff_max_seconds: float = 30.0
-    backoff_jitter_seconds: float = 0.5
-
-
-@dataclass(frozen=True)
-class OcrConfig:
-    language_hints: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class PipelineConfig:
-    publication: PublicationConfig
-    gcs: GcsConfig
-    source: SourceConfig
-    explode: ExplodeParams
-    ocr: OcrConfig
-    acquisition: AcquisitionConfig = AcquisitionConfig()
 
 
 def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:

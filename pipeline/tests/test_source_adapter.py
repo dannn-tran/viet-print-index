@@ -3,10 +3,9 @@ from itertools import islice
 import unittest
 from unittest.mock import patch
 
-from vie_doc_pipeline.images.pdf import ExplodeParams
-from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
+from vie_doc_pipeline.config.models import ExplodeParams, GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.sources.http import encode_url
-from vie_doc_pipeline.sources.discover import open_source_items
+from vie_doc_pipeline.sources.factory import open_source_items
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -40,7 +39,7 @@ class SourceAdapterTest(unittest.TestCase):
             ocr=OcrConfig(),
         )
 
-        with patch("vie_doc_pipeline.sources.discover.http_client") as open_http:
+        with patch("vie_doc_pipeline.sources.factory.http_client") as open_http:
             with open_source_items(pipeline_config) as source_items:
                 urls = [item.source_url for item in source_items.iter_source_items()]
 
@@ -68,7 +67,7 @@ class SourceAdapterTest(unittest.TestCase):
         )
         http = _FakeHttpClient()
 
-        with patch("vie_doc_pipeline.sources.discover.http_client", return_value=http) as open_http:
+        with patch("vie_doc_pipeline.sources.factory.http_client", return_value=http) as open_http:
             with open_source_items(config) as source_items:
                 self.assertEqual(len(list(islice(source_items.iter_source_items(), 1))), 1)
 

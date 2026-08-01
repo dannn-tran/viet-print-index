@@ -16,11 +16,11 @@ from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
-from vie_doc_pipeline.ledger.locks import acquisition_lock
+from vie_doc_pipeline.ledger.locking import acquisition_lock
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
-from vie_doc_pipeline.pipeline_config import PipelineConfig
+from vie_doc_pipeline.config.models import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
-from vie_doc_pipeline.workflow.assets import SourceAsset
+from vie_doc_pipeline.domain.assets import SourceAsset
 from vie_doc_pipeline.domain.results import DownloadSummary
 
 logger = logging.getLogger(__name__)
@@ -75,21 +75,24 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
     """Download discovered source assets, resuming from the ledger."""
     with acquisition_lock(ledger_path):
         storage_client = storage.Client(project=config.gcs.project)
-        bucket = storage_client.bucket(config.gcs.bucket)
-        assets = iter_download_candidates(ledger_path, limit)
-        client = http_client(config.acquisition)
         try:
-            context = DownloadContext(
-                bucket=bucket,
-                storage_client=storage_client,
-                http=client,
-                ledger_path=ledger_path,
-                retry_delay=config.acquisition.backoff_max_seconds,
-            )
-            outcomes = run_downloads(context, assets, config.acquisition.max_workers)
-            return summarize_downloads(outcomes)
+            bucket = storage_client.bucket(config.gcs.bucket)
+            assets = iter_download_candidates(ledger_path, limit)
+            client = http_client(config.acquisition)
+            try:
+                context = DownloadContext(
+                    bucket=bucket,
+                    storage_client=storage_client,
+                    http=client,
+                    ledger_path=ledger_path,
+                    retry_delay=config.acquisition.backoff_max_seconds,
+                )
+                outcomes = run_downloads(context, assets, config.acquisition.max_workers)
+                return summarize_downloads(outcomes)
+            finally:
+                client.close()
         finally:
-            client.close()
+            storage_client.close()
 
 
 def iter_download_candidates(ledger_path: Path, limit: int | None) -> Iterator[SourceAsset]:

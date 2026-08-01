@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
-from vie_doc_pipeline.pipeline_config import (
+from vie_doc_pipeline.config.models import (
     LocalPdfSource,
     PipelineConfig,
     UrlListPdfSource,
