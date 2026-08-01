@@ -21,7 +21,7 @@ class EventStoreTest(unittest.TestCase):
 
             state.record(image_normalized(asset))
             self.assertEqual(state.current[asset.key].event, "image_normalized")
-            self.assertEqual(len(list(store.read_events())), 2)
+            self.assertEqual(len(list(store.iter_events())), 2)
 
     def test_concurrent_appends_remain_parseable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -33,7 +33,7 @@ class EventStoreTest(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 list(executor.map(store.append, events))
 
-            self.assertEqual(len(list(store.read_events())), len(events))
+            self.assertEqual(len(list(store.iter_events())), len(events))
 
     def test_replay_repairs_an_incomplete_final_record(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -47,4 +47,4 @@ class EventStoreTest(unittest.TestCase):
             state = AppState.replay(store)
 
             self.assertTrue(state.current[asset.key].asset)
-            self.assertEqual(len(list(store.read_events())), 1)
+            self.assertEqual(len(list(store.iter_events())), 1)

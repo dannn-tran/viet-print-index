@@ -211,7 +211,7 @@ def _source_id(asset: SourceAsset) -> str:
 
 def load_inversion_overrides(event_store: EventStore) -> InversionOverrides:
     """Read explicit review decisions once before normalising a batch."""
-    events = tuple(event_store.read_events())
+    events = tuple(event_store.iter_events())
     return InversionOverrides(
         source_ids=frozenset(event.asset_key for event in events if event.event == "source_inverted"),
         image_keys=frozenset(event.asset_key for event in events if event.event == "image_inverted"),

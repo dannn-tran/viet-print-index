@@ -8,7 +8,6 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
-from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
@@ -16,6 +15,7 @@ from vie_doc_pipeline.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.fetch_source import fetch_source_assets
+from vie_doc_pipeline.workflow.configuration import bind_configuration
 from vie_doc_pipeline.workflow.normalize_images import (
     AllNormalizationCandidates,
     ImageNormalizationCandidates,
@@ -55,7 +55,7 @@ def status(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     current = AppState.replay(event_store).current
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
@@ -75,7 +75,7 @@ def source_discover(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     assets = discover_source_assets(config, event_store, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"State file  : {state_path}")
@@ -91,7 +91,7 @@ def source_fetch(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     summary = fetch_source_assets(config, event_store, limit=limit)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
@@ -112,7 +112,7 @@ def images_normalize(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     state = AppState.replay(event_store)
     selection = normalization_selection(source_id, image_id)
     if inverted:
@@ -149,7 +149,7 @@ def images_review(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     current = AppState.replay(event_store).current
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
@@ -185,7 +185,7 @@ def ocr_submit_jobs(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     summary = submit_ocr_jobs(config, event_store, limit=limit)
     print(f"Submitted   : {summary.submitted} images")
     print(f"State file  : {state_path}")
@@ -200,7 +200,7 @@ def ocr_check_status(
     config = load_config(config_path)
     state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
+    bind_configuration(event_store, config.config_toml)
     summary = check_ocr_status(config, event_store)
     print(f"Completed   : {summary.completed} images")
     print(f"Pending     : {summary.pending} images")

@@ -47,7 +47,7 @@ class AppState:
         """Rebuild current state by applying persisted events in order."""
         event_store.repair_trailing_record()
         current: CurrentState = {}
-        for event in event_store.read_events():
+        for event in event_store.iter_events():
             current = apply_event(current, event)
         return cls(event_store, current)
 

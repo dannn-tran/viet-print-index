@@ -113,7 +113,7 @@ vie-pipeline ocr check-status <config-path> # report completed/pending OCR outpu
   therefore cannot be confused at runtime.
 - The event store is the durable, human-inspectable event history; Python
   replays it into typed in-memory application state for workflow decisions.
-- The first event records the exact TOML snapshot and its SHA-256. A different
+- The first event records the exact TOML configuration. A different
   configuration cannot silently mix state, and historical settings remain
   reconstructible even if the source TOML later changes.
 - Appends are fsynced. If a process is interrupted during the final JSONL

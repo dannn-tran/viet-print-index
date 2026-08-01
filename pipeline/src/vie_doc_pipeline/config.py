@@ -1,6 +1,5 @@
 """Validated configuration records and TOML loading."""
 
-import hashlib
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -98,14 +97,6 @@ class OcrConfig:
 
 
 @dataclass(frozen=True)
-class ConfigSnapshot:
-    """Exact TOML text and content hash used to build a pipeline config."""
-
-    toml: str
-    sha256: str
-
-
-@dataclass(frozen=True)
 class PipelineConfig:
     publication: PublicationConfig
     target: TargetStorage
@@ -113,19 +104,15 @@ class PipelineConfig:
     explode: ExplodeParams
     ocr: OcrConfig
     source_requests: SourceRequestsConfig = SourceRequestsConfig()
-    config_snapshot: ConfigSnapshot | None = None
-
-    @property
-    def config_sha256(self) -> str | None:
-        return self.config_snapshot.sha256 if self.config_snapshot is not None else None
+    config_toml: str | None = None
 
 
 def load_config(config_path: str | Path) -> PipelineConfig:
     path = Path(config_path)
     if not path.exists():
         raise FileNotFoundError(f"No config found at {path}")
-    raw_bytes = path.read_bytes()
-    raw = tomllib.loads(raw_bytes.decode("utf-8"))
+    raw_toml = path.read_bytes().decode("utf-8")
+    raw = tomllib.loads(raw_toml)
 
     config = PipelineConfig(
         publication=parse_publication(_required_table(raw, "publication")),
@@ -134,10 +121,7 @@ def load_config(config_path: str | Path) -> PipelineConfig:
         explode=parse_explode(_optional_table(raw, "explode")),
         ocr=parse_ocr(_optional_table(raw, "ocr")),
         source_requests=parse_source_requests(_optional_table(raw, "source_requests")),
-        config_snapshot=ConfigSnapshot(
-            toml=raw_bytes.decode("utf-8"),
-            sha256=hashlib.sha256(raw_bytes).hexdigest(),
-        ),
+        config_toml=raw_toml,
     )
     _validate_config(config)
     return config

@@ -27,7 +27,7 @@ class EventStore:
         """Bind an event store to one append-only event file."""
         return cls(path)
 
-    def read_events(self) -> Iterator[EventRecord]:
+    def iter_events(self) -> Iterator[EventRecord]:
         """Stream events in their persisted order."""
         if not self._path.exists():
             return

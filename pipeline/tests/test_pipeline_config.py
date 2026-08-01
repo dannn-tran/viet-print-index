@@ -1,4 +1,3 @@
-import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -37,14 +36,12 @@ class PipelineConfigTest(unittest.TestCase):
             SourceRequestsConfig(max_concurrent_requests=2, min_interval_seconds=1.0),
         )
 
-    def test_loaded_config_carries_exact_toml_fingerprint(self) -> None:
+    def test_loaded_config_carries_exact_toml(self) -> None:
         config_path = Path("sources/nlv-cuu-quoc.toml")
         config = load_config(config_path)
-        toml_bytes = config_path.read_bytes()
+        toml_text = config_path.read_bytes().decode("utf-8")
 
-        self.assertEqual(config.config_sha256, hashlib.sha256(toml_bytes).hexdigest())
-        self.assertIsNotNone(config.config_snapshot)
-        self.assertEqual(config.config_snapshot.toml if config.config_snapshot else None, toml_bytes.decode("utf-8"))
+        self.assertEqual(config.config_toml, toml_text)
 
     def test_rejects_invalid_source_date(self) -> None:
         with self.assertRaisesRegex(ValueError, "source.from_date"):

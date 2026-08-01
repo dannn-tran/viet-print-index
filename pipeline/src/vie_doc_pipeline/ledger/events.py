@@ -52,11 +52,11 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def configuration_bound(config_sha256: str, config_snapshot: str) -> EventRecord:
+def configuration_bound(config_toml: str) -> EventRecord:
     return _event(
         "configuration_bound",
         "__configuration__",
-        {"config_sha256": config_sha256, "config_snapshot": config_snapshot},
+        {"config_toml": config_toml},
     )
 
 
