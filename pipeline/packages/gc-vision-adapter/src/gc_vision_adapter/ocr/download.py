@@ -2,6 +2,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from itertools import repeat
 from pathlib import Path, PurePosixPath
 
 from google.cloud import storage
@@ -19,51 +20,45 @@ class DownloadOcrResultToLocalCommand:
 
 def download_ocr(project_id: str, cmd: DownloadOcrResultToLocalCommand):
     storage_client = storage.Client(project=project_id)
-
-    dst_dirpath = Path(cmd.dst_dirpath)
-
-    blobs = storage_client.list_blobs(cmd.src_bucket, prefix=cmd.src_file_prefix)
-
-    if cmd.workers < 2:
-        for b in blobs:
-            _download_one(dst_dirpath, b)
-        return
-
-    with ThreadPoolExecutor(max_workers=cmd.workers) as executor:
-        for _ in executor.map(lambda b: _download_one(dst_dirpath, b), blobs):
-            pass
+    try:
+        dst_dirpath = Path(cmd.dst_dirpath)
+        blobs = storage_client.list_blobs(cmd.src_bucket, prefix=cmd.src_file_prefix)
+        if cmd.workers < 2:
+            for blob in blobs:
+                _download_one(dst_dirpath, blob)
+            return
+        with ThreadPoolExecutor(max_workers=cmd.workers) as executor:
+            for _ in executor.map(_download_one, repeat(dst_dirpath), blobs):
+                continue
+    finally:
+        storage_client.close()
 
 
 def _download_one(dst_dirpath: Path, blob: storage.Blob):
-    try:
-        if not blob.name.endswith(".json"):
-            return
-        # TODO: skip download if file already downloaded
-        for uri, resp in _explode(blob):
-            p = PurePosixPath(uri)
-            dirpath = dst_dirpath / p.parent.name
-            dirpath.mkdir(parents=True, exist_ok=True)
-            dst = dirpath / f"{p.stem}.json"
-            with open(dst, "w") as f:
-                json.dump(resp, f)
-            logger.info(f"Written {dst}.")
-    except Exception as e:
-        logger.error(e)
-        raise e
+    if not blob.name.endswith(".json"):
+        return
+    for uri, resp in _explode(blob):
+        p = PurePosixPath(uri)
+        dirpath = dst_dirpath / p.parent.name
+        dirpath.mkdir(parents=True, exist_ok=True)
+        dst = dirpath / f"{p.stem}.json"
+        with open(dst, "w") as f:
+            json.dump(resp, f)
+        logger.info("Written %s.", dst)
 
 
 def _explode(blob: storage.Blob):
-    logger.info(f"Download starting - {blob.name}...")
+    logger.info("Download starting - %s...", blob.name)
     raw = blob.download_as_bytes()
-    logger.info(f"Download finished - {blob.name}.")
+    logger.info("Download finished - %s.", blob.name)
 
     responses: list[dict] = json.loads(raw).get("responses", [])
     if not responses:
-        logger.info(f"No responses in {blob.name}")
+        logger.info("No responses in %s", blob.name)
 
     for i, resp in enumerate(responses):
         uri = resp.get("context", dict()).get("uri")
         if not uri:
-            logger.warning(f"No URI found for response at index {i} of {blob.name}")
+            logger.warning("No URI found for response at index %s of %s", i, blob.name)
             continue
         yield uri, resp
