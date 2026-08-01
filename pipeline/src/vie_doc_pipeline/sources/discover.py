@@ -31,56 +31,114 @@ class SourceItemProvider(Protocol):
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]: ...
 
+    def close(self) -> None: ...
+
 
 @dataclass(frozen=True)
-class StaticSourceItemProvider:
-    """Enumerates source types that do not need HTTP during discovery."""
+class UrlSequenceSourceItemProvider:
+    source: UrlSequencePdfSource
 
-    source: UrlSequencePdfSource | UrlListPdfSource | LocalPdfSource
+    @classmethod
+    def from_source(cls, source: UrlSequencePdfSource) -> "UrlSequenceSourceItemProvider":
+        return cls(source)
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
-        match self.source:
-            case UrlSequencePdfSource():
-                yield from iter_source_items_from_url_sequence(
-                    self.source.base_url,
-                    self.source.pattern,
-                    self.source.issue_range,
-                    self.source.extra_urls,
-                )
-            case UrlListPdfSource():
-                yield from iter_source_items_from_url_list(self.source.urls)
-            case LocalPdfSource():
-                yield from iter_source_items_from_local_directory(self.source.path)
+        yield from iter_source_items_from_url_sequence(
+            self.source.base_url,
+            self.source.pattern,
+            self.source.issue_range,
+            self.source.extra_urls,
+        )
+
+    def close(self) -> None:
+        return None
 
 
 @dataclass(frozen=True)
-class HttpSourceItemProvider:
-    """Enumerates source types that need the shared HTTP session."""
+class UrlListSourceItemProvider:
+    source: UrlListPdfSource
 
-    source: VeridianSource | WebPagePdfSource
+    @classmethod
+    def from_source(cls, source: UrlListPdfSource) -> "UrlListSourceItemProvider":
+        return cls(source)
+
+    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
+        yield from iter_source_items_from_url_list(self.source.urls)
+
+    def close(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class LocalDirectorySourceItemProvider:
+    source: LocalPdfSource
+
+    @classmethod
+    def from_source(cls, source: LocalPdfSource) -> "LocalDirectorySourceItemProvider":
+        return cls(source)
+
+    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
+        yield from iter_source_items_from_local_directory(self.source.path)
+
+    def close(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class VeridianSourceItemProvider:
+    source: VeridianSource
     http: HttpClient
 
+    @classmethod
+    def open(cls, source: VeridianSource, config: PipelineConfig) -> "VeridianSourceItemProvider":
+        return cls(source, http_client(config.acquisition))
+
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
-        match self.source:
-            case VeridianSource():
-                yield from iter_source_items_from_veridian(self.source, self.http)
-            case WebPagePdfSource():
-                yield from iter_source_items_from_web_page(
-                    self.source.page_url,
-                    self.http.fetch_text(self.source.page_url),
-                )
+        yield from iter_source_items_from_veridian(self.source, self.http)
+
+    def close(self) -> None:
+        self.http.close()
+
+
+@dataclass(frozen=True)
+class WebPageSourceItemProvider:
+    source: WebPagePdfSource
+    http: HttpClient
+
+    @classmethod
+    def open(cls, source: WebPagePdfSource, config: PipelineConfig) -> "WebPageSourceItemProvider":
+        return cls(source, http_client(config.acquisition))
+
+    def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
+        yield from iter_source_items_from_web_page(
+            self.source.page_url,
+            self.http.fetch_text(self.source.page_url),
+        )
+
+    def close(self) -> None:
+        self.http.close()
 
 
 @contextmanager
 def open_source_items(config: PipelineConfig) -> Iterator[SourceItemProvider]:
     """Open exactly the resources required to enumerate one configured source."""
-    source = config.source
-    if isinstance(source, (UrlSequencePdfSource, UrlListPdfSource, LocalPdfSource)):
-        yield StaticSourceItemProvider(source)
-        return
-
-    client = http_client(config.acquisition)
+    provider = source_item_provider(config)
     try:
-        yield HttpSourceItemProvider(source, client)
+        yield provider
     finally:
-        client.close()
+        provider.close()
+
+
+def source_item_provider(config: PipelineConfig) -> SourceItemProvider:
+    """Construct the provider selected by the one typed source-variant match."""
+    match config.source:
+        case VeridianSource() as source:
+            return VeridianSourceItemProvider.open(source, config)
+        case WebPagePdfSource() as source:
+            return WebPageSourceItemProvider.open(source, config)
+        case UrlSequencePdfSource() as source:
+            return UrlSequenceSourceItemProvider.from_source(source)
+        case UrlListPdfSource() as source:
+            return UrlListSourceItemProvider.from_source(source)
+        case LocalPdfSource() as source:
+            return LocalDirectorySourceItemProvider.from_source(source)

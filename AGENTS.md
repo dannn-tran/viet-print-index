@@ -47,6 +47,10 @@ control flow, interfaces, effects, and failure modes are evident to a reader.
   selects among interchangeable implementations. The factory should return a
   common protocol/interface and should create only the dependencies required
   by the chosen implementation.
+- Match a discriminated union once in the factory, construct the selected
+  implementation there, and let that implementation run directly. Do not
+  first categorize variants (for example, “HTTP” versus “static”) and then
+  match the same variant again inside a generic implementation.
 - Keep factory selection comparable: implementations should expose the same
   primary method and follow one naming grammar. Put shared lifecycle handling
   at the factory/context-manager boundary, not in callers.
