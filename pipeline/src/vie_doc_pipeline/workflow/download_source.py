@@ -13,6 +13,7 @@ from itertools import islice
 from pathlib import Path
 
 from google.cloud import storage
+from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
@@ -156,4 +157,15 @@ def _failure_details(error: Exception) -> tuple[bool, int]:
         return False, 1
     if isinstance(error, TransientSourceError):
         return True, error.attempts
-    return True, 1
+    if isinstance(
+        error,
+        (
+            google_exceptions.DeadlineExceeded,
+            google_exceptions.GatewayTimeout,
+            google_exceptions.InternalServerError,
+            google_exceptions.ServiceUnavailable,
+            google_exceptions.TooManyRequests,
+        ),
+    ):
+        return True, 1
+    return False, 1
