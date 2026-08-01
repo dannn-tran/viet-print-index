@@ -8,9 +8,11 @@ from pathlib import PurePosixPath
 from vie_doc_pipeline.models import DiscoveredSourceItem, ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config.models import PipelineConfig
 
+
 def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
     if item.kind == "image":
-        assert item.issue_id and item.page_id
+        if not item.issue_id or not item.page_id:
+            raise ValueError(f"Image source item is missing issue/page identity: {item.source_url}")
         return ImageAsset(
             publication_id=config.publication.id,
             issue_id=item.issue_id,

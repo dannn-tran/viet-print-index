@@ -11,6 +11,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from google.cloud import storage
+from google.api_core import exceptions as google_exceptions
+import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
@@ -116,9 +118,9 @@ def normalize_asset(
                 return NormalizationSummary(native_registered=normalize_native_image(context, asset))
             case PdfAsset():
                 return NormalizationSummary(created=normalize_pdf_asset(context, asset))
-    except Exception as error:
+    except (google_exceptions.GoogleAPIError, OSError, ValueError, fitz.FitzError) as error:
         append_event(context.ledger_path, failed(asset.key, stage="normalize", error=str(error)))
-        logger.exception("Failed to normalize %s", asset.key)
+        logger.warning("Failed to normalize %s: %s", asset.key, error)
     return NormalizationSummary(failed=1)
 
 

@@ -47,10 +47,10 @@ class PdfAsset:
     @classmethod
     def from_dict(cls, raw: dict[str, object]) -> "PdfAsset":
         return cls(
-            publication_id=str(raw["publication_id"]),
-            document_id=str(raw["document_id"]),
-            source_url=str(raw["source_url"]),
-            gcs_object=str(raw["gcs_object"]),
+            publication_id=_required_string(raw, "publication_id"),
+            document_id=_required_string(raw, "document_id"),
+            source_url=_required_string(raw, "source_url"),
+            gcs_object=_required_string(raw, "gcs_object"),
         )
 
 
@@ -79,18 +79,20 @@ class ImageAsset:
 
     @classmethod
     def from_dict(cls, raw: dict[str, object]) -> "ImageAsset":
+        kind = raw.get("kind", "image")
+        if kind != "image":
+            raise ValueError(f"Invalid image asset kind: {kind!r}")
         return cls(
-            publication_id=str(raw["publication_id"]),
-            issue_id=str(raw["issue_id"]),
-            page_id=str(raw["page_id"]),
-            source_url=str(raw["source_url"]),
-            gcs_object=str(raw["gcs_object"]),
-            kind=str(raw.get("kind", "image")),  # type: ignore[arg-type]
-            width=int(raw["width"]) if raw.get("width") is not None else None,
-            height=int(raw["height"]) if raw.get("height") is not None else None,
-            issue_label=str(raw["issue_label"]) if raw.get("issue_label") is not None else None,
-            inverted=bool(raw.get("inverted", False)),
-            needs_review=bool(raw.get("needs_review", False)),
+            publication_id=_required_string(raw, "publication_id"),
+            issue_id=_required_string(raw, "issue_id"),
+            page_id=_required_string(raw, "page_id"),
+            source_url=_required_string(raw, "source_url"),
+            gcs_object=_required_string(raw, "gcs_object"),
+            width=_optional_int(raw, "width"),
+            height=_optional_int(raw, "height"),
+            issue_label=_optional_string(raw, "issue_label"),
+            inverted=_optional_bool(raw, "inverted", False),
+            needs_review=_optional_bool(raw, "needs_review", False),
         )
 
 
@@ -101,5 +103,41 @@ SourceAsset = PdfAsset | ImageAsset
 
 def source_asset_from_dict(raw: dict[str, object]) -> SourceAsset:
     """Decode one JSONL asset payload at the persistence boundary."""
-    return PdfAsset.from_dict(raw) if raw.get("kind") == "pdf" else ImageAsset.from_dict(raw)
+    kind = raw.get("kind")
+    if kind == "pdf":
+        return PdfAsset.from_dict(raw)
+    if kind in (None, "image"):
+        return ImageAsset.from_dict(raw)
+    raise ValueError(f"Unknown source asset kind: {kind!r}")
 
+
+def _required_string(raw: dict[str, object], field: str) -> str:
+    value = raw.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"Asset field {field!r} must be a non-empty string")
+    return value
+
+
+def _optional_string(raw: dict[str, object], field: str) -> str | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Asset field {field!r} must be a string")
+    return value
+
+
+def _optional_int(raw: dict[str, object], field: str) -> int | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Asset field {field!r} must be an integer")
+    return value
+
+
+def _optional_bool(raw: dict[str, object], field: str, default: bool) -> bool:
+    value = raw.get(field, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"Asset field {field!r} must be true or false")
+    return value

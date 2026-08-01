@@ -66,7 +66,7 @@ class DownloadContext:
             blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
             append_event(self.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             return Downloaded(asset)
-        except Exception as error:
+        except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
             record_download_failure(self.ledger_path, asset, error, self.retry_delay)
             return DownloadFailed(asset)
 
@@ -126,7 +126,7 @@ def record_download_failure(ledger_path: Path, asset: SourceAsset, error: Except
             retry_not_before=time.time() + retry_delay if retryable else None,
         ),
     )
-    logger.exception("Failed to download %s", asset.key)
+    logger.warning("Failed to download %s: %s", asset.key, error)
 
 
 def summarize_downloads(outcomes: Iterable[DownloadOutcome]) -> DownloadSummary:
