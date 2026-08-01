@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 from pathlib import PurePosixPath
 
@@ -10,14 +13,20 @@ from google.cloud import storage
 
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.jsonl import append_event, read_events
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
-from vie_doc_pipeline.models import ImageAsset
+from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.workflow.assets import asset_from_state
 from vie_doc_pipeline.workflow.image_processing import check_inversion, invert_image
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class InversionOverrides:
+    source_ids: frozenset[str]
+    image_keys: frozenset[str]
 
 
 def normalize_images(
@@ -31,52 +40,142 @@ def normalize_images(
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
     current = load_current(ledger_path)
-    assets = [asset_from_state(raw) for raw in assets_at(current, "source_downloaded")]
-    if source_id or image_key:
-        assets = [
-            asset_from_state(raw)
-            for key, raw in current.items()
-            if "asset" in raw and raw.get("event") in {"source_downloaded", "image_normalized"}
-            and ((source_id is not None and _source_id(asset_from_state(raw)) == source_id) or key == image_key)
-        ]
-    if limit is not None:
-        assets = assets[:limit]
+    overrides = load_inversion_overrides(ledger_path)
+    assets = iter_normalization_candidates(current, source_id, image_key, limit)
+    results = (
+        normalize_asset(config, ledger_path, bucket, client, asset, overrides)
+        for asset in assets
+    )
+    return summarize_normalization(results)
 
-    created = 0
-    passthrough = 0
-    for asset in assets:
-        if isinstance(asset, ImageAsset):
-            raw_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
-            image = _normalize_bytes(asset, raw_bytes, asset.gcs_object, _is_forced_inverted(ledger_path, asset))
-            if image.gcs_object != asset.gcs_object:
-                bucket.blob(image.gcs_object).upload_from_string(
-                    invert_image(raw_bytes, asset.gcs_object), content_type=_image_content_type(image.gcs_object), timeout=600
-                )
-            append_event(ledger_path, image_normalized(image))
-            passthrough += 1
+
+def iter_normalization_candidates(
+    current: dict[str, dict[str, object]],
+    source_id: str | None,
+    image_key: str | None,
+    limit: int | None,
+) -> Iterator[SourceAsset]:
+    """Yield source assets selected for normalisation or explicit reprocessing."""
+    if not source_id and not image_key:
+        yield from islice(map(asset_from_state, assets_at(current, "source_downloaded")), limit)
+        return
+
+    yield from islice(
+        iter_selected_assets(current, source_id, image_key),
+        limit,
+    )
+
+
+def iter_selected_assets(
+    current: dict[str, dict[str, object]], source_id: str | None, image_key: str | None
+) -> Iterator[SourceAsset]:
+    """Yield explicitly selected assets without repeatedly decoding ledger data."""
+    for key, raw in current.items():
+        if "asset" not in raw or raw.get("event") not in {"source_downloaded", "image_normalized"}:
             continue
-        try:
-            pdf_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
-            for filename, image_bytes in explode_pdf_bytes(pdf_bytes, config.explode):
-                image = ImageAsset(
-                    publication_id=asset.publication_id,
-                    issue_id=asset.document_id,
-                    page_id=PurePosixPath(filename).stem,
-                    source_url=asset.source_url,
-                    gcs_object=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
-                    issue_label=asset.document_id,
-                )
-                image = _normalize_bytes(image, image_bytes, filename, _is_forced_inverted(ledger_path, image))
-                blob = bucket.blob(image.gcs_object)
-                if not blob.exists(client):
-                    output = invert_image(image_bytes, filename) if image.inverted else image_bytes
-                    blob.upload_from_string(output, content_type=_image_content_type(image.gcs_object), timeout=600)
-                append_event(ledger_path, image_normalized(image))
-                created += 1
-            append_event(ledger_path, image_normalized(asset))
-        except Exception as error:
-            append_event(ledger_path, failed(asset.key, stage="normalize", error=str(error)))
-            logger.exception("Failed to normalize %s", asset.key)
+        asset = asset_from_state(raw)
+        if (source_id is not None and _source_id(asset) == source_id) or key == image_key:
+            yield asset
+
+
+def normalize_asset(
+    config: PipelineConfig,
+    ledger_path: Path,
+    bucket: storage.Bucket,
+    client: storage.Client,
+    asset: SourceAsset,
+    overrides: InversionOverrides,
+) -> tuple[int, int]:
+    """Normalise one source asset and persist either its images or failure."""
+    try:
+        match asset:
+            case ImageAsset():
+                return 0, normalize_native_image(ledger_path, bucket, asset, overrides)
+            case PdfAsset():
+                return normalize_pdf_asset(config, ledger_path, bucket, client, asset, overrides), 0
+    except Exception as error:
+        append_event(ledger_path, failed(asset.key, stage="normalize", error=str(error)))
+        logger.exception("Failed to normalize %s", asset.key)
+    return 0, 0
+
+
+def normalize_native_image(
+    ledger_path: Path,
+    bucket: storage.Bucket,
+    asset: ImageAsset,
+    overrides: InversionOverrides,
+) -> int:
+    """Designate a native image, writing a new object only when it is inverted."""
+    raw_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
+    image = _normalize_bytes(asset, raw_bytes, asset.gcs_object, is_forced_inverted(asset, overrides))
+    if image.gcs_object != asset.gcs_object:
+        bucket.blob(image.gcs_object).upload_from_string(
+            invert_image(raw_bytes, asset.gcs_object),
+            content_type=_image_content_type(image.gcs_object),
+            timeout=600,
+        )
+    append_event(ledger_path, image_normalized(image))
+    return 1
+
+
+def normalize_pdf_asset(
+    config: PipelineConfig,
+    ledger_path: Path,
+    bucket: storage.Bucket,
+    client: storage.Client,
+    asset: PdfAsset,
+    overrides: InversionOverrides,
+) -> int:
+    """Render one PDF and store its presentation/OCR image assets."""
+    pdf_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
+    created = 0
+    for image, image_bytes in iter_pdf_image_assets(config, asset, pdf_bytes, overrides):
+        store_pdf_image(bucket, client, image, image_bytes)
+        append_event(ledger_path, image_normalized(image))
+        created += 1
+    append_event(ledger_path, image_normalized(asset))
+    return created
+
+
+def iter_pdf_image_assets(
+    config: PipelineConfig,
+    asset: PdfAsset,
+    pdf_bytes: bytes,
+    overrides: InversionOverrides,
+) -> Iterator[tuple[ImageAsset, bytes]]:
+    """Yield normalised image records and bytes rendered from one PDF."""
+    for filename, image_bytes in explode_pdf_bytes(pdf_bytes, config.explode):
+        image = pdf_image_asset(config, asset, filename)
+        yield _normalize_bytes(image, image_bytes, filename, is_forced_inverted(image, overrides)), image_bytes
+
+
+def pdf_image_asset(config: PipelineConfig, asset: PdfAsset, filename: str) -> ImageAsset:
+    """Build the canonical image-asset record for one rendered PDF image."""
+    return ImageAsset(
+        publication_id=asset.publication_id,
+        issue_id=asset.document_id,
+        page_id=PurePosixPath(filename).stem,
+        source_url=asset.source_url,
+        gcs_object=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
+        issue_label=asset.document_id,
+    )
+
+
+def store_pdf_image(bucket: storage.Bucket, client: storage.Client, image: ImageAsset, image_bytes: bytes) -> None:
+    """Upload a rendered image exactly once, applying inversion when required."""
+    blob = bucket.blob(image.gcs_object)
+    if blob.exists(client):
+        return
+    output = invert_image(image_bytes, image.gcs_object) if image.inverted else image_bytes
+    blob.upload_from_string(output, content_type=_image_content_type(image.gcs_object), timeout=600)
+
+
+def summarize_normalization(results: Iterator[tuple[int, int]]) -> tuple[int, int]:
+    """Return total (created, native-passthrough) image counts."""
+    created, passthrough = 0, 0
+    for created_count, passthrough_count in results:
+        created += created_count
+        passthrough += passthrough_count
     return created, passthrough
 
 
@@ -88,14 +187,18 @@ def _source_id(asset: object) -> str:
     return asset.document_id if hasattr(asset, "document_id") else asset.issue_id  # type: ignore[union-attr]
 
 
-def _is_forced_inverted(ledger_path: Path, asset: ImageAsset) -> bool:
-    from vie_doc_pipeline.ledger.jsonl import read_events
-
-    return any(
-        event.event == "image_inverted" and event.asset_key == asset.key
-        or event.event == "source_inverted" and event.asset_key == _source_id(asset)
-        for event in read_events(ledger_path)
+def load_inversion_overrides(ledger_path: Path) -> InversionOverrides:
+    """Read explicit review decisions once before normalising a batch."""
+    events = tuple(read_events(ledger_path))
+    return InversionOverrides(
+        source_ids=frozenset(event.asset_key for event in events if event.event == "source_inverted"),
+        image_keys=frozenset(event.asset_key for event in events if event.event == "image_inverted"),
     )
+
+
+def is_forced_inverted(asset: ImageAsset, overrides: InversionOverrides) -> bool:
+    """Return whether review explicitly requested inversion for this image."""
+    return asset.key in overrides.image_keys or _source_id(asset) in overrides.source_ids
 
 
 def _normalize_bytes(asset: ImageAsset, data: bytes, filename: str, forced_inverted: bool) -> ImageAsset:
