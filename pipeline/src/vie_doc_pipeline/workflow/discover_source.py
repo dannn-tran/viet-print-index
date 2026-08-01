@@ -10,7 +10,7 @@ from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
-from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 
@@ -44,8 +44,9 @@ def discover_source_assets(
     config: PipelineConfig, ledger_path: Path, limit: int | None = None
 ) -> list[SourceAsset]:
     """Discover external source records that are not already in the ledger."""
-    ensure_ledger_config(ledger_path, config.config_sha256)
-    state = AppState.replay(EventStore.open(ledger_path))
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    state = AppState.replay(event_store)
     with open_source_items(config) as source_items:
         known_asset_keys = set(state.current)
         new_assets: list[SourceAsset] = []

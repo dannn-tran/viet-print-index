@@ -6,7 +6,7 @@ from unittest.mock import patch
 from vie_doc_pipeline.config import GcsTarget, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, source_discovered
-from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.workflow.ocr import _parse_gs_uri
 from vie_doc_pipeline.workflow.ocr import check_ocr_status
@@ -31,8 +31,9 @@ class OcrStateTest(unittest.TestCase):
         client = _FakeStorageClient()
         with TemporaryDirectory() as directory:
             path = Path(directory) / "state.jsonl"
-            append_event(path, source_discovered(asset))
-            append_event(path, ocr_job_submitted([asset.key], job_id="job-1", output_prefix="gs://bucket/pub/ocr/job-1")[0])
+            store = EventStore.open(path)
+            store.append(source_discovered(asset))
+            store.append(ocr_job_submitted([asset.key], job_id="job-1", output_prefix="gs://bucket/pub/ocr/job-1")[0])
             with patch("vie_doc_pipeline.workflow.ocr.storage.Client", return_value=client):
                 summary = check_ocr_status(config, path)
 

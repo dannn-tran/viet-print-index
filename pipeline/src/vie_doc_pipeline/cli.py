@@ -8,7 +8,7 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
-from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import AppState, load_current
 from vie_doc_pipeline.ledger.store import EventStore
@@ -50,7 +50,7 @@ def status(
     """Summarise current workflow lifecycle and review states."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_ledger_config(ledger_path, config.config_sha256)
+    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
     current = load_current(ledger_path)
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
@@ -70,7 +70,7 @@ def source_discover(
     """Discover external source records into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_ledger_config(ledger_path, config.config_sha256)
+    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
     assets = discover_source_assets(config, ledger_path, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"Ledger      : {ledger_path}")
@@ -106,8 +106,9 @@ def images_normalize(
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_ledger_config(ledger_path, config.config_sha256)
-    state = AppState.replay(EventStore.open(ledger_path))
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    state = AppState.replay(event_store)
     selection = normalization_selection(source_id, image_id)
     if inverted:
         match selection:
@@ -143,7 +144,7 @@ def images_review(
     """List normalized images that were retained unchanged for manual review."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_ledger_config(ledger_path, config.config_sha256)
+    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
     current = load_current(ledger_path)
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:

@@ -14,7 +14,7 @@ from pathlib import Path
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_fetched
-from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.locking import source_fetch_lock
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
@@ -94,9 +94,9 @@ class FetchContext:
 def fetch_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> FetchSummary:
     """Fetch discovered source assets into the configured target."""
     with source_fetch_lock(ledger_path):
-        ensure_ledger_config(ledger_path, config.config_sha256)
+        event_store = EventStore.open(ledger_path)
+        ensure_config_compatible(event_store, config.config_snapshot)
         with open_target_store(config.target) as store:
-            event_store = EventStore.open(ledger_path)
             current = AppState.replay(event_store).current
             assets = iter_fetch_candidates(current, limit)
             client = http_client(config.source_requests)

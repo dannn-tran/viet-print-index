@@ -42,6 +42,8 @@ class PipelineConfigTest(unittest.TestCase):
         toml_bytes = Path("sources/nlv-cuu-quoc.toml").read_bytes()
 
         self.assertEqual(config.config_sha256, hashlib.sha256(toml_bytes).hexdigest())
+        self.assertIsNotNone(config.config_snapshot)
+        self.assertEqual(config.config_snapshot.toml if config.config_snapshot else None, toml_bytes.decode("utf-8"))
 
     def test_rejects_invalid_source_date(self) -> None:
         with self.assertRaisesRegex(ValueError, "source.from_date"):

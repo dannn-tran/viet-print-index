@@ -98,6 +98,14 @@ class OcrConfig:
 
 
 @dataclass(frozen=True)
+class ConfigSnapshot:
+    """Exact TOML text and content hash used to build a pipeline config."""
+
+    toml: str
+    sha256: str
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     publication: PublicationConfig
     target: TargetStorage
@@ -105,7 +113,11 @@ class PipelineConfig:
     explode: ExplodeParams
     ocr: OcrConfig
     source_requests: SourceRequestsConfig = SourceRequestsConfig()
-    config_sha256: str | None = None
+    config_snapshot: ConfigSnapshot | None = None
+
+    @property
+    def config_sha256(self) -> str | None:
+        return self.config_snapshot.sha256 if self.config_snapshot is not None else None
 
 
 def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
@@ -122,7 +134,10 @@ def load_config(pub_id: str, config_dir: str = "sources") -> PipelineConfig:
         explode=parse_explode(_optional_table(raw, "explode")),
         ocr=parse_ocr(_optional_table(raw, "ocr")),
         source_requests=parse_source_requests(_optional_table(raw, "source_requests")),
-        config_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        config_snapshot=ConfigSnapshot(
+            toml=raw_bytes.decode("utf-8"),
+            sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        ),
     )
     _validate_config(config)
     return config

@@ -52,8 +52,12 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def ledger_initialized(config_sha256: str) -> LedgerEvent:
-    return _event("ledger_initialized", "__ledger__", {"config_sha256": config_sha256})
+def ledger_initialized(config_sha256: str, config_snapshot: str) -> LedgerEvent:
+    return _event(
+        "ledger_initialized",
+        "__ledger__",
+        {"config_sha256": config_sha256, "config_snapshot": config_snapshot},
+    )
 
 
 def source_discovered(asset: Asset) -> LedgerEvent:

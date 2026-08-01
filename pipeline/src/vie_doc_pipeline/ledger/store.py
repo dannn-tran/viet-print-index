@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vie_doc_pipeline.ledger.events import LedgerEvent
-from vie_doc_pipeline.ledger.jsonl import append_event, read_events
+from vie_doc_pipeline.ledger.jsonl import _append_event, _read_events
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,8 @@ class EventStore:
 
     def read_events(self) -> Iterator[LedgerEvent]:
         """Stream events in their persisted order."""
-        yield from read_events(self._path)
+        yield from _read_events(self._path)
 
     def append(self, event: LedgerEvent) -> None:
         """Append one event atomically with the store's file lock."""
-        append_event(self._path, event)
+        _append_event(self._path, event)

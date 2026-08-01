@@ -9,7 +9,7 @@ from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
-from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState, assets_at
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
@@ -29,8 +29,9 @@ class OcrSubmissionSummary:
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> OcrSubmissionSummary:
     target = _require_gcs_target(config.target)
-    ensure_ledger_config(ledger_path, config.config_sha256)
-    state = AppState.replay(EventStore.open(ledger_path))
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    state = AppState.replay(event_store)
     assets = list(islice((
         item.asset
         for item in assets_at(state.current, "image_normalized")
@@ -56,7 +57,7 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
 def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSummary:
     """Check for OCR results in GCS and return completed and pending image counts."""
     _require_gcs_target(config.target)
-    ensure_ledger_config(ledger_path, config.config_sha256)
+    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
     with open_ocr_status_session(config, ledger_path) as session:
         return session.check()
 

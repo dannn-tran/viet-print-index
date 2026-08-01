@@ -1,33 +1,38 @@
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from vie_doc_pipeline.config import ConfigSnapshot
 from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_fetched
-from vie_doc_pipeline.ledger.jsonl import LedgerConfigMismatchError, append_event, ensure_ledger_config, read_events
+from vie_doc_pipeline.ledger.configuration import ConfigMismatchError, ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
+from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 
 
-class JsonlLedgerTest(unittest.TestCase):
-    def test_records_and_validates_config_fingerprint(self) -> None:
+class EventStoreConfigTest(unittest.TestCase):
+    def test_records_and_validates_config_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
-            ensure_ledger_config(path, "a" * 64)
-            ensure_ledger_config(path, "a" * 64)
+            snapshot = _snapshot("config-a")
+            store = EventStore.open(path)
+            ensure_config_compatible(store, snapshot)
+            ensure_config_compatible(store, snapshot)
 
-            self.assertEqual(list(read_events(path, "a" * 64))[0].event, "ledger_initialized")
-            self.assertEqual(len(list(read_events(path))), 1)
-            with self.assertRaises(LedgerConfigMismatchError):
-                ensure_ledger_config(path, "b" * 64)
+            events = list(store.read_events())
+            self.assertEqual(events[0].event, "ledger_initialized")
+            self.assertEqual(events[0].data["config_snapshot"], "config-a")
+            self.assertEqual(len(events), 1)
+            with self.assertRaises(ConfigMismatchError):
+                ensure_config_compatible(store, _snapshot("config-b"))
 
-            with self.assertRaises(LedgerConfigMismatchError):
-                list(read_events(path, "b" * 64))
-
-    def test_refuses_to_mix_legacy_events_with_a_fingerprinted_run(self) -> None:
+    def test_refuses_to_mix_events_without_a_config_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
-            append_event(path, source_discovered(ImageAsset(
+            store = EventStore.open(path)
+            store.append(source_discovered(ImageAsset(
                 publication_id="pub",
                 issue_id="issue",
                 page_id="001",
@@ -35,8 +40,8 @@ class JsonlLedgerTest(unittest.TestCase):
                 target_path="pub/images/1.jpg",
             )))
 
-            with self.assertRaises(LedgerConfigMismatchError):
-                ensure_ledger_config(path, "a" * 64)
+            with self.assertRaises(ConfigMismatchError):
+                ensure_config_compatible(store, _snapshot("config-a"))
 
     def test_appends_inspectable_events_and_reconstructs_current_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -48,25 +53,27 @@ class JsonlLedgerTest(unittest.TestCase):
                 source_url="https://example.test/page.jpg",
                 target_path="nlv-cuu-quoc/images/WNyf19450905/001.jpg",
             )
-            append_event(path, source_discovered(asset))
-            append_event(path, source_fetched(asset, checksum="abc123", size_bytes=100))
-            append_event(path, image_normalized(asset))
-            append_event(path, ocr_job_submitted([asset.key], job_id="operation-1", output_prefix="gs://bucket/ocr/batch-0")[0])
+            store = EventStore.open(path)
+            store.append(source_discovered(asset))
+            store.append(source_fetched(asset, checksum="abc123", size_bytes=100))
+            store.append(image_normalized(asset))
+            store.append(ocr_job_submitted([asset.key], job_id="operation-1", output_prefix="gs://bucket/ocr/batch-0")[0])
 
             lines = path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
             self.assertEqual(load_current(path)[asset.key].job_id, "operation-1")
-            self.assertEqual(len(list(read_events(path))), 4)
+            self.assertEqual(len(list(store.read_events())), 4)
 
     def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
-            append_event(path, source_discovered(ImageAsset(
+            store = EventStore.open(path)
+            store.append(source_discovered(ImageAsset(
                 publication_id="pub", issue_id="issue", page_id="001", source_url="https://example.test/1", target_path="pub/images/1.jpg"
             )))
             asset_key = "pub/issue/001"
-            append_event(path, failed(asset_key, stage="fetch", error="temporary failure"))
+            store.append(failed(asset_key, stage="fetch", error="temporary failure"))
             current = load_current(path)[asset_key]
             self.assertEqual(current.event, "source_discovered")
             self.assertIsNotNone(current.failure)
@@ -76,17 +83,19 @@ class JsonlLedgerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
             asset = ImageAsset("pub", "issue", "001", "https://example.test/1", "pub/images/1.jpg")
-            append_event(path, source_discovered(asset))
-            append_event(path, failed(asset.key, stage="fetch", error="HTTP 404", retryable=False))
+            store = EventStore.open(path)
+            store.append(source_discovered(asset))
+            store.append(failed(asset.key, stage="fetch", error="HTTP 404", retryable=False))
             self.assertEqual(eligible_source_assets(load_current(path)), [])
 
     def test_successful_retry_clears_prior_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
             asset = ImageAsset("pub", "issue", "001", "https://example.test/1", "pub/images/1.jpg")
-            append_event(path, source_discovered(asset))
-            append_event(path, failed(asset.key, stage="fetch", error="timeout"))
-            append_event(path, source_fetched(asset, checksum="checksum", size_bytes=10))
+            store = EventStore.open(path)
+            store.append(source_discovered(asset))
+            store.append(failed(asset.key, stage="fetch", error="timeout"))
+            store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
             self.assertIsNone(load_current(path)[asset.key].failure)
 
     def test_rejects_unknown_event_shape_at_jsonl_boundary(self) -> None:
@@ -95,4 +104,8 @@ class JsonlLedgerTest(unittest.TestCase):
             path.write_text('{"event":"future_event","asset_key":"asset","at":"now","data":{}}\n', encoding="utf-8")
 
             with self.assertRaisesRegex(ValueError, "Invalid ledger event"):
-                list(read_events(path))
+                list(EventStore.open(path).read_events())
+
+
+def _snapshot(toml: str) -> ConfigSnapshot:
+    return ConfigSnapshot(toml=toml, sha256=hashlib.sha256(toml.encode("utf-8")).hexdigest())

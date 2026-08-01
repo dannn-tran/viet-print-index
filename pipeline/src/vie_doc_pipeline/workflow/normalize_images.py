@@ -15,7 +15,7 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.jsonl import ensure_ledger_config
+from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, assets_at
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
@@ -76,9 +76,10 @@ def normalize_images(
     selection: NormalizationSelection = AllNormalizationCandidates(),
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
-    ensure_ledger_config(ledger_path, config.config_sha256)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
     with open_target_store(config.target) as store:
-        state = AppState.replay(EventStore.open(ledger_path))
+        state = AppState.replay(event_store)
         current = state.current
         overrides = load_inversion_overrides(state.event_store)
         assets = iter_normalization_candidates(current, selection, limit)
