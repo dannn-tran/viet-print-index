@@ -16,7 +16,7 @@ from google.api_core import exceptions as google_exceptions
 from vie_doc_pipeline.ledger.events import failed, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event, ensure_ledger_config
 from vie_doc_pipeline.ledger.locking import source_download_lock
-from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
+from vie_doc_pipeline.ledger.projection import CurrentState, eligible_source_assets, load_current
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
@@ -71,8 +71,24 @@ class DownloadContext:
             append_event(self.ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             return Downloaded(asset)
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
-            record_download_failure(self.ledger_path, asset, error, self.retry_delay)
+            self.record_failure(asset, error)
             return DownloadFailed(asset)
+
+    def record_failure(self, asset: SourceAsset, error: Exception) -> None:
+        """Persist retry metadata for one failed source download."""
+        retryable, attempts = _failure_details(error)
+        append_event(
+            self.ledger_path,
+            failed(
+                asset.key,
+                stage="download",
+                error=str(error),
+                retryable=retryable,
+                attempts=attempts,
+                retry_not_before=time.time() + self.retry_delay if retryable else None,
+            ),
+        )
+        logger.warning("Failed to download %s: %s", asset.key, error)
 
 
 def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> DownloadSummary:
@@ -80,7 +96,8 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
     with source_download_lock(ledger_path):
         ensure_ledger_config(ledger_path, config.config_sha256)
         with open_target_store(config.target) as store:
-            assets = iter_download_candidates(ledger_path, limit, config.config_sha256)
+            current = load_current(ledger_path, config.config_sha256)
+            assets = iter_download_candidates(current, limit)
             client = http_client(config.source_requests)
             try:
                 context = DownloadContext(
@@ -96,12 +113,10 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
 
 
 def iter_download_candidates(
-    ledger_path: Path,
+    current: CurrentState,
     limit: int | None,
-    expected_config_sha256: str | None = None,
 ) -> Iterator[SourceAsset]:
-    """Yield source assets that the ledger says are eligible for another attempt."""
-    current = load_current(ledger_path, expected_config_sha256)
+    """Yield source assets eligible for another download attempt."""
     assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
     yield from islice(assets, limit)
 
@@ -114,23 +129,6 @@ def run_downloads(
     """Apply one download function concurrently while retaining input ordering."""
     with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
         yield from executor.map(context.download, assets)
-
-
-def record_download_failure(ledger_path: Path, asset: SourceAsset, error: Exception, retry_delay: float) -> None:
-    """Persist retry metadata for one failed source download."""
-    retryable, attempts = _failure_details(error)
-    append_event(
-        ledger_path,
-        failed(
-            asset.key,
-            stage="download",
-            error=str(error),
-            retryable=retryable,
-            attempts=attempts,
-            retry_not_before=time.time() + retry_delay if retryable else None,
-        ),
-    )
-    logger.warning("Failed to download %s: %s", asset.key, error)
 
 
 def summarize_downloads(outcomes: Iterable[DownloadOutcome]) -> DownloadSummary:
