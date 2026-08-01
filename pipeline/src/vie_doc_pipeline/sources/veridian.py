@@ -13,7 +13,6 @@ import urllib.parse
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
-from itertools import chain
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import VeridianSource
@@ -52,45 +51,21 @@ def iter_source_items_from_veridian(
     """Discover native full-page images from a configured Veridian catalogue."""
     catalogue_url = config.catalogue_url.rstrip("/")
     catalogue_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id, ai="1"))
-    issues = iter_catalogue_issues(catalogue_html, config.title_id, config.from_date, config.to_date)
-    issue_htmls = (
-        (issue, fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid)))
-        for issue in issues
-    )
-    pages = chain.from_iterable(
-        iter_issue_pages(config, issue, issue_html)
-        for issue, issue_html in issue_htmls
-    )
-    yield from pages
-
-
-def iter_catalogue_issues(
-    catalogue_html: str,
-    title_id: str,
-    from_date: date | None,
-    to_date: date | None,
-) -> Iterator[Issue]:
-    """Yield in-range issues parsed from one complete Veridian catalogue page."""
-    issues = sorted(issues_from_catalogue_html(catalogue_html, title_id), key=lambda issue: issue.published_on)
-    yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), issues)
-
-
-def iter_issue_pages(
-    config: VeridianSource,
-    issue: Issue,
-    issue_html: str,
-) -> Iterator[DiscoveredSourceItem]:
-    """Yield native full-page images parsed from one already-fetched viewer page."""
-    for page in parse_pages(issue_html, issue.oid):
-        yield DiscoveredSourceItem(
-            kind="image",
-            source_url=page_image_url(config.image_server_url, page),
-            issue_id=issue.oid,
-            issue_label=f"{issue.published_on.isoformat()}_{issue.oid}",
-            page_id=page.page_id,
-            width=page.width,
-            height=page.height,
-        )
+    issues = sorted(issues_from_catalogue_html(catalogue_html, config.title_id), key=lambda issue: issue.published_on)
+    for issue in issues:
+        if not config.from_date <= issue.published_on <= config.to_date:
+            continue
+        issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
+        for page in parse_pages(issue_html, issue.oid):
+            yield DiscoveredSourceItem(
+                kind="image",
+                source_url=page_image_url(config.image_server_url, page),
+                issue_id=issue.oid,
+                issue_label=f"{issue.published_on.isoformat()}_{issue.oid}",
+                page_id=page.page_id,
+                width=page.width,
+                height=page.height,
+            )
 
 
 def catalogue_url_for(catalogue_url: str, **query: str) -> str:
@@ -125,7 +100,3 @@ def issues_from_catalogue_html(catalogue_html: str, title_id: str) -> list[Issue
             except ValueError:
                 pass
     return list(issues.values())
-
-
-def in_range(value: date, from_date: date | None, to_date: date | None) -> bool:
-    return (from_date is None or value >= from_date) and (to_date is None or value <= to_date)
