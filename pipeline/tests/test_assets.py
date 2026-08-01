@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import load_current
-from vie_doc_pipeline.models import PageAsset
+from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
 from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
 from vie_doc_pipeline.workflow.assets import asset_from_source_item
@@ -28,7 +28,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         asset = asset_from_source_item(config, source_item)
 
         self.assertEqual(asset.document_id, "Tuần báo 001")
-        self.assertEqual(asset.object_name, "doi-moi/pdf/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
+        self.assertEqual(asset.gcs_object, "doi-moi/pdf/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
 
     def test_native_image_materialization_never_writes_another_object(self) -> None:
         config = PipelineConfig(
@@ -38,7 +38,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             explode=ExplodeParams(),
             ocr=OcrConfig(),
         )
-        asset = PageAsset("cuu-quoc", "issue-001", "001", "https://example.test/001.jpg", "cuu-quoc/images/issue-001/001.jpg")
+        asset = ImageAsset("cuu-quoc", "issue-001", "001", "https://example.test/001.jpg", "cuu-quoc/images/issue-001/001.jpg")
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
             append_event(ledger_path, source_discovered(asset))

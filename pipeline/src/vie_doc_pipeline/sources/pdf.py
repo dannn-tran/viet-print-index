@@ -7,11 +7,11 @@ import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 
-from vie_doc_pipeline.models import SourceItem
+from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import SourceConfig
 
 
-def discover_pdf_items(config: SourceConfig, fetch_text: Callable[[str], str]) -> list[SourceItem]:
+def discover_pdf_items(config: SourceConfig, fetch_text: Callable[[str], str]) -> list[DiscoveredSourceItem]:
     """Return PDF source items for the configured non-image source type."""
     match config.type:
         case "web_page":
@@ -29,7 +29,7 @@ def discover_pdf_items(config: SourceConfig, fetch_text: Callable[[str], str]) -
             urls = [str(item) for item in sorted(Path(path).glob("*.pdf"))]
         case _:
             raise ValueError(f"Unknown PDF source type: {config.type!r}")
-    return [SourceItem(kind="pdf", source_url=url) for url in dict.fromkeys(urls)]
+    return [DiscoveredSourceItem(kind="pdf", source_url=url) for url in dict.fromkeys(urls)]
 
 
 def _pdf_urls_from_page(page_url: str, page_html: str) -> list[str]:

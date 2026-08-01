@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Literal
 
-from vie_doc_pipeline.models import DocumentAsset, LedgerEvent, PageAsset, utc_now
+from vie_doc_pipeline.models import LedgerEvent, SourceAsset, utc_now
 
-Asset = DocumentAsset | PageAsset
+Asset = SourceAsset
 
 
 def source_discovered(asset: Asset) -> LedgerEvent:

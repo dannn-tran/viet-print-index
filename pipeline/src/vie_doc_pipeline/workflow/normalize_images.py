@@ -12,7 +12,7 @@ from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
-from vie_doc_pipeline.models import DocumentAsset, PageAsset
+from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.workflow.assets import asset_from_state
 
@@ -30,21 +30,21 @@ def normalize_images(config: PipelineConfig, ledger_path: Path, limit: int | Non
     created = 0
     passthrough = 0
     for asset in assets:
-        if isinstance(asset, PageAsset):
+        if isinstance(asset, ImageAsset):
             append_event(ledger_path, image_normalized(asset))
             passthrough += 1
             continue
         try:
-            pdf_bytes = bucket.blob(asset.object_name).download_as_bytes(timeout=600)
+            pdf_bytes = bucket.blob(asset.gcs_object).download_as_bytes(timeout=600)
             for filename, image_bytes in explode_pdf_bytes(pdf_bytes, config.explode):
-                image = PageAsset(
+                image = ImageAsset(
                     publication_id=asset.publication_id,
                     issue_id=asset.document_id,
                     page_id=PurePosixPath(filename).stem,
                     source_url=asset.source_url,
-                    object_name=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
+                    gcs_object=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
                 )
-                blob = bucket.blob(image.object_name)
+                blob = bucket.blob(image.gcs_object)
                 if not blob.exists(client):
                     blob.upload_from_string(image_bytes, content_type=_image_content_type(filename), timeout=600)
                 append_event(ledger_path, image_normalized(image))

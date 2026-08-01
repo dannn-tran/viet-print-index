@@ -8,13 +8,13 @@ from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.projection import assets_at, load_current
-from vie_doc_pipeline.models import PageAsset
+from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> int:
     assets = [
-        PageAsset.from_dict(raw["asset"])
+        ImageAsset.from_dict(raw["asset"])
         for raw in assets_at(load_current(ledger_path), "image_normalized")
         if isinstance(raw.get("asset"), dict)
         and raw["asset"].get("kind", "image") == "image"
@@ -30,7 +30,7 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
         output_dir=config.gcs.ocr_output_prefix,
         language_hints=config.ocr.language_hints,
     )
-    uri_to_asset = {f"gs://{config.gcs.bucket}/{asset.object_name}": asset for asset in assets}
+    uri_to_asset = {f"gs://{config.gcs.bucket}/{asset.gcs_object}": asset for asset in assets}
     jobs = submit_ocr_batches(config.gcs.project, command, list(uri_to_asset))
     for job in jobs:
         for event in ocr_job_submitted([uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix):

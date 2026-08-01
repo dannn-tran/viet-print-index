@@ -15,7 +15,7 @@ def utc_now() -> str:
 
 
 @dataclass(frozen=True)
-class SourceItem:
+class DiscoveredSourceItem:
     """One source document or native image discovered by an adapter."""
 
     kind: AssetKind
@@ -27,13 +27,13 @@ class SourceItem:
 
 
 @dataclass(frozen=True)
-class DocumentAsset:
+class PdfAsset:
     """A fetched source document that may need to be materialised into pages."""
 
     publication_id: str
     document_id: str
     source_url: str
-    object_name: str
+    gcs_object: str
     kind: Literal["pdf"] = "pdf"
 
     @property
@@ -44,24 +44,24 @@ class DocumentAsset:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, object]) -> "DocumentAsset":
+    def from_dict(cls, raw: dict[str, object]) -> "PdfAsset":
         return cls(
             publication_id=str(raw["publication_id"]),
             document_id=str(raw["document_id"]),
             source_url=str(raw["source_url"]),
-            object_name=str(raw["object_name"]),
+            gcs_object=str(raw["gcs_object"]),
         )
 
 
 @dataclass(frozen=True)
-class PageAsset:
-    """One source page that can be fetched, OCRed, and indexed independently."""
+class ImageAsset:
+    """One image asset for presentation and OCR, including spreads or covers."""
 
     publication_id: str
     issue_id: str
     page_id: str
     source_url: str
-    object_name: str
+    gcs_object: str
     kind: AssetKind = "image"
     width: int | None = None
     height: int | None = None
@@ -74,17 +74,22 @@ class PageAsset:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, object]) -> "PageAsset":
+    def from_dict(cls, raw: dict[str, object]) -> "ImageAsset":
         return cls(
             publication_id=str(raw["publication_id"]),
             issue_id=str(raw["issue_id"]),
             page_id=str(raw["page_id"]),
             source_url=str(raw["source_url"]),
-            object_name=str(raw["object_name"]),
+            gcs_object=str(raw["gcs_object"]),
             kind=str(raw.get("kind", "image")),  # type: ignore[arg-type]
             width=int(raw["width"]) if raw.get("width") is not None else None,
             height=int(raw["height"]) if raw.get("height") is not None else None,
         )
+
+
+# A native image is both the original source object and, when unchanged, its
+# own presentation/OCR image asset. PDFs become image assets during normalization.
+SourceAsset = PdfAsset | ImageAsset
 
 
 @dataclass(frozen=True)

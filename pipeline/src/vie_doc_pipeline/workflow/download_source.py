@@ -30,7 +30,7 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
     existing = 0
     fetch = rate_limited(fetch_bytes, config.source.delay_seconds) if config.source.type == "veridian" else fetch_bytes
     for asset in assets:
-        blob = bucket.blob(asset.object_name)
+        blob = bucket.blob(asset.gcs_object)
         if blob.exists(client):
             blob.reload(client)
             append_event(ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
@@ -41,7 +41,7 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
             blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
             append_event(ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             downloaded += 1
-            print(f"Downloaded: {asset.object_name}")
+            print(f"Downloaded: {asset.gcs_object}")
         except Exception as error:
             append_event(ledger_path, failed(asset.key, stage="download", error=str(error)))
             logger.exception("Failed to download %s", asset.key)
