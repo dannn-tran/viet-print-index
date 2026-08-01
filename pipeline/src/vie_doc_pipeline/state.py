@@ -24,7 +24,7 @@ class JsonlStateStore:
     def record_fetched(self, asset: DocumentAsset | PageAsset, *, checksum: str, size_bytes: int) -> None:
         self.append("fetched", asset.key, {"checksum": checksum, "size_bytes": size_bytes})
 
-    def record_materialized(self, asset: PageAsset) -> None:
+    def record_materialized(self, asset: DocumentAsset | PageAsset) -> None:
         self.append("materialized", asset.key, {"asset": asset.to_dict()})
 
     def record_ocr_submitted(self, asset_keys: Iterable[str], *, job_id: str, output_prefix: str) -> None:

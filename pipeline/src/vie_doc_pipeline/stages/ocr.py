@@ -15,7 +15,9 @@ def submit_ocr(config: PipelineConfig, state: JsonlStateStore, limit: int | None
     assets = [
         PageAsset.from_dict(raw["asset"])
         for raw in current.values()
-        if raw.get("event") == "fetched" and "asset" in raw
+        if raw.get("event") == "materialized"
+        and isinstance(raw.get("asset"), dict)
+        and raw["asset"].get("kind", "image") == "image"
     ]
     if limit is not None:
         assets = assets[:limit]

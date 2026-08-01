@@ -8,7 +8,7 @@ from gc_vision_adapter.ocr.run import RunBatchOcrCommand, batch_ocr
 from vie_doc_pipeline.config.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.stages.calibrate import run_calibrate
-from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets
+from vie_doc_pipeline.stages.assets import discover_assets, fetch_assets, materialize_pages
 from vie_doc_pipeline.stages.explode import run_explode
 from vie_doc_pipeline.stages.ingest import run_ingest
 from vie_doc_pipeline.stages.ocr import reconcile_ocr, submit_ocr
@@ -97,12 +97,12 @@ def discover(
     limit: _Limit = None,
     state_dir: _StateDir = Path(".pipeline-state"),
 ) -> None:
-    """Discover source pages and record them in an inspectable JSONL ledger."""
+    """Discover source documents or native page images into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
     assets = discover_assets(config, state, limit=limit)
     print(f"Publication : {config.publication.name} ({pub_id})")
-    print(f"Pages       : {len(assets)}")
+    print(f"Assets      : {len(assets)}")
     print(f"State       : {state.path}")
 
 
@@ -113,12 +113,28 @@ def fetch(
     limit: _Limit = None,
     state_dir: _StateDir = Path(".pipeline-state"),
 ) -> None:
-    """Fetch discovered source pages into GCS, resuming from the JSONL ledger."""
+    """Fetch discovered source assets into GCS, resuming from the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     state = JsonlStateStore(default_state_path(pub_id, state_dir))
     fetched, skipped = fetch_assets(config, state, limit=limit)
     print(f"Fetched     : {fetched}")
     print(f"Already in GCS: {skipped}")
+    print(f"State       : {state.path}")
+
+
+@app.command("materialize")
+def materialize(
+    pub_id: _PubArg,
+    config_dir: _ConfigDir = "sources",
+    limit: _Limit = None,
+    state_dir: _StateDir = Path(".pipeline-state"),
+) -> None:
+    """Materialize fetched documents into pages without copying native images."""
+    config = load_config(pub_id, config_dir)
+    state = JsonlStateStore(default_state_path(pub_id, state_dir))
+    pages, passthrough = materialize_pages(config, state, limit=limit)
+    print(f"Pages created: {pages}")
+    print(f"Native images: {passthrough} (recorded without copying)")
     print(f"State       : {state.path}")
 
 
