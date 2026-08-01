@@ -3,25 +3,27 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from pathlib import PurePosixPath
 
 from google.cloud import storage
 
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
+from vie_doc_pipeline.ledger.events import failed, image_normalized
+from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.models import DocumentAsset, PageAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.state import JsonlStateStore
 from vie_doc_pipeline.workflow.assets import asset_from_state
 
 logger = logging.getLogger(__name__)
 
 
-def normalize_images(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> tuple[int, int]:
+def normalize_images(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> tuple[int, int]:
     """Create image assets from PDFs or designate native images without copying."""
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
-    current = state.current()
-    assets = [asset_from_state(raw) for raw in current.values() if raw.get("event") == "fetched" and "asset" in raw]
+    assets = [asset_from_state(raw) for raw in assets_at(load_current(ledger_path), "source_downloaded")]
     if limit is not None:
         assets = assets[:limit]
 
@@ -29,7 +31,7 @@ def normalize_images(config: PipelineConfig, state: JsonlStateStore, limit: int 
     passthrough = 0
     for asset in assets:
         if isinstance(asset, PageAsset):
-            state.record_materialized(asset)
+            append_event(ledger_path, image_normalized(asset))
             passthrough += 1
             continue
         try:
@@ -45,11 +47,11 @@ def normalize_images(config: PipelineConfig, state: JsonlStateStore, limit: int 
                 blob = bucket.blob(image.object_name)
                 if not blob.exists(client):
                     blob.upload_from_string(image_bytes, content_type=_image_content_type(filename), timeout=600)
-                state.record_materialized(image)
+                append_event(ledger_path, image_normalized(image))
                 created += 1
-            state.record_materialized(asset)
+            append_event(ledger_path, image_normalized(asset))
         except Exception as error:
-            state.record_failure(asset.key, stage="normalize", error=str(error))
+            append_event(ledger_path, failed(asset.key, stage="normalize", error=str(error)))
             logger.exception("Failed to normalize %s", asset.key)
     return created, passthrough
 

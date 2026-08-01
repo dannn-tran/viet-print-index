@@ -4,23 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from pathlib import Path
 
 from google.cloud import storage
 
+from vie_doc_pipeline.ledger.events import failed, source_downloaded
+from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.projection import assets_at, load_current
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources.http import fetch_bytes, rate_limited
-from vie_doc_pipeline.state import JsonlStateStore
 from vie_doc_pipeline.workflow.assets import SourceAsset, asset_from_state
 
 logger = logging.getLogger(__name__)
 
 
-def download_source_assets(config: PipelineConfig, state: JsonlStateStore, limit: int | None = None) -> tuple[int, int]:
+def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> tuple[int, int]:
     """Download discovered source assets, resuming from the ledger."""
     client = storage.Client(project=config.gcs.project)
     bucket = client.bucket(config.gcs.bucket)
-    current = state.current()
-    assets = [asset_from_state(raw) for raw in current.values() if raw.get("event") == "discovered" and "asset" in raw]
+    assets = [asset_from_state(raw) for raw in assets_at(load_current(ledger_path), "source_discovered")]
     if limit is not None:
         assets = assets[:limit]
 
@@ -31,17 +33,17 @@ def download_source_assets(config: PipelineConfig, state: JsonlStateStore, limit
         blob = bucket.blob(asset.object_name)
         if blob.exists(client):
             blob.reload(client)
-            state.record_fetched(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0)
+            append_event(ledger_path, source_downloaded(asset, checksum=blob.md5_hash or "unknown", size_bytes=blob.size or 0))
             existing += 1
             continue
         try:
             data = fetch(asset.source_url)
             blob.upload_from_string(data, content_type=_content_type(asset), timeout=600)
-            state.record_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
+            append_event(ledger_path, source_downloaded(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
             downloaded += 1
             print(f"Downloaded: {asset.object_name}")
         except Exception as error:
-            state.record_failure(asset.key, stage="download", error=str(error))
+            append_event(ledger_path, failed(asset.key, stage="download", error=str(error)))
             logger.exception("Failed to download %s", asset.key)
     return downloaded, existing
 

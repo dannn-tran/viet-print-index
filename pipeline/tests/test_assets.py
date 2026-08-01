@@ -3,13 +3,15 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+from vie_doc_pipeline.ledger.events import source_discovered, source_downloaded
+from vie_doc_pipeline.ledger.jsonl import append_event
+from vie_doc_pipeline.ledger.projection import load_current
 from vie_doc_pipeline.models import PageAsset
 from vie_doc_pipeline.explode_mem import ExplodeParams
 from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, SourceConfig
 from vie_doc_pipeline.workflow.assets import asset_from_source_item
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.normalize_images import normalize_images
-from vie_doc_pipeline.state import JsonlStateStore
 
 
 class AssetDiscoveryTest(unittest.TestCase):
@@ -38,17 +40,17 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
         asset = PageAsset("cuu-quoc", "issue-001", "001", "https://example.test/001.jpg", "cuu-quoc/images/issue-001/001.jpg")
         with TemporaryDirectory() as directory:
-            state = JsonlStateStore(Path(directory) / "state.jsonl")
-            state.record_discovered(asset)
-            state.record_fetched(asset, checksum="checksum", size_bytes=10)
+            ledger_path = Path(directory) / "state.jsonl"
+            append_event(ledger_path, source_discovered(asset))
+            append_event(ledger_path, source_downloaded(asset, checksum="checksum", size_bytes=10))
             client = _FakeStorageClient()
 
             with patch("vie_doc_pipeline.workflow.normalize_images.storage.Client", return_value=client):
-                pages, passthrough = normalize_images(config, state)
+                pages, passthrough = normalize_images(config, ledger_path)
 
             self.assertEqual((pages, passthrough), (0, 1))
             self.assertEqual(client.bucket_instance.blob_names, [])
-            self.assertEqual(state.current()[asset.key]["event"], "materialized")
+            self.assertEqual(load_current(ledger_path)[asset.key]["event"], "image_normalized")
 
     def test_discovery_does_not_overwrite_existing_ledger_state(self) -> None:
         config = PipelineConfig(
@@ -59,11 +61,11 @@ class AssetDiscoveryTest(unittest.TestCase):
             ocr=OcrConfig(),
         )
         with TemporaryDirectory() as directory:
-            state = JsonlStateStore(Path(directory) / "state.jsonl")
+            ledger_path = Path(directory) / "state.jsonl"
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch("vie_doc_pipeline.workflow.discover_source.discover_source_items", return_value=[source_item]):
-                self.assertEqual(len(discover_source_assets(config, state)), 1)
-                self.assertEqual(discover_source_assets(config, state), [])
+                self.assertEqual(len(discover_source_assets(config, ledger_path)), 1)
+                self.assertEqual(discover_source_assets(config, ledger_path), [])
 
 
 class _FakeBucket:

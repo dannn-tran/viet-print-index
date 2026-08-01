@@ -88,10 +88,13 @@ class PageAsset:
 
 
 @dataclass(frozen=True)
-class StateEvent:
+class LedgerEvent:
     """An append-only transition in the state ledger."""
 
-    event: Literal["discovered", "fetched", "materialized", "ocr_submitted", "ocr_completed", "ocr_failed", "indexed", "failed"]
+    event: Literal[
+        "source_discovered", "source_downloaded", "image_normalized",
+        "ocr_job_submitted", "ocr_output_available", "failed",
+    ]
     asset_key: str
     at: str
     data: dict[str, object]

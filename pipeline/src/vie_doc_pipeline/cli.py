@@ -1,6 +1,5 @@
 """Command-line interface for the source-to-OCR workflow."""
 
-from collections import Counter
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -8,7 +7,7 @@ import typer
 
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.pipeline_config import load_config
-from vie_doc_pipeline.state import JsonlStateStore, default_state_path
+from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.workflow.calibrate_images import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
 from vie_doc_pipeline.workflow.download_source import download_source_assets
@@ -62,10 +61,10 @@ def source_discover(
 ) -> None:
     """Discover external source records into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    assets = discover_source_assets(config, state, limit=limit)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    assets = discover_source_assets(config, ledger_path, limit=limit)
     print(f"Discovered  : {len(assets)}")
-    print(f"State       : {state.path}")
+    print(f"Ledger      : {ledger_path}")
 
 
 @source_app.command("download")
@@ -77,11 +76,11 @@ def source_download(
 ) -> None:
     """Download discovered original source assets into GCS."""
     config = load_config(pub_id, config_dir)
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    downloaded, existing = download_source_assets(config, state, limit=limit)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    downloaded, existing = download_source_assets(config, ledger_path, limit=limit)
     print(f"Downloaded  : {downloaded}")
     print(f"Already in GCS: {existing}")
-    print(f"State       : {state.path}")
+    print(f"Ledger      : {ledger_path}")
 
 
 @images_app.command("normalize")
@@ -93,11 +92,11 @@ def images_normalize(
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(pub_id, config_dir)
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    images, passthrough = normalize_images(config, state, limit=limit)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    images, passthrough = normalize_images(config, ledger_path, limit=limit)
     print(f"Images created: {images}")
     print(f"Native images : {passthrough} (registered without copying)")
-    print(f"State       : {state.path}")
+    print(f"Ledger      : {ledger_path}")
 
 
 @images_app.command("calibrate")
@@ -120,10 +119,10 @@ def ocr_submit_jobs(
 ) -> None:
     """Submit OCR jobs for normalized image assets without waiting."""
     config = load_config(pub_id, config_dir)
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    submitted = submit_ocr_jobs(config, state, limit=limit)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    submitted = submit_ocr_jobs(config, ledger_path, limit=limit)
     print(f"Submitted   : {submitted} images")
-    print(f"State       : {state.path}")
+    print(f"Ledger      : {ledger_path}")
 
 
 @ocr_app.command("check-status")
@@ -134,20 +133,8 @@ def ocr_check_status(
 ) -> None:
     """Report whether submitted OCR jobs have result files in GCS."""
     config = load_config(pub_id, config_dir)
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    completed, pending = check_ocr_status(config, state)
+    ledger_path = default_ledger_path(pub_id, state_dir)
+    completed, pending = check_ocr_status(config, ledger_path)
     print(f"Completed   : {completed} images")
     print(f"Pending     : {pending} images")
-    print(f"State       : {state.path}")
-
-
-@app.command("state", hidden=True)
-def state_status(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
-    """Temporary compatibility command; replaced by the final status view."""
-    state = JsonlStateStore(default_state_path(pub_id, state_dir))
-    current = state.current()
-    counts = Counter(str(record.get("event", "unknown")) for record in current.values())
-    print(f"State       : {state.path}")
-    print(f"Assets      : {len(current)}")
-    for event, count in sorted(counts.items()):
-        print(f"  {event:<14} {count:>6}")
+    print(f"Ledger      : {ledger_path}")
