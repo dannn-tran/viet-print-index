@@ -20,7 +20,7 @@ from vie_doc_pipeline.ledger.locks import acquisition_lock
 from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
 from vie_doc_pipeline.pipeline_config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
-from vie_doc_pipeline.workflow.assets import SourceAsset, asset_from_state
+from vie_doc_pipeline.workflow.assets import SourceAsset
 from vie_doc_pipeline.workflow.results import DownloadSummary
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def download_source_assets(config: PipelineConfig, ledger_path: Path, limit: int
 def iter_download_candidates(ledger_path: Path, limit: int | None) -> Iterator[SourceAsset]:
     """Yield source assets that the ledger says are eligible for another attempt."""
     current = load_current(ledger_path)
-    assets = map(asset_from_state, eligible_source_assets(current))
+    assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
     yield from islice(assets, limit)
 
 

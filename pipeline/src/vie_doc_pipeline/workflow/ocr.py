@@ -15,10 +15,9 @@ from vie_doc_pipeline.workflow.results import OcrStatusSummary
 
 def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> int:
     assets = [
-        ImageAsset.from_dict(raw["asset"])
-        for raw in assets_at(load_current(ledger_path), "image_normalized")
-        if isinstance(raw.get("asset"), dict)
-        and raw["asset"].get("kind", "image") == "image"
+        state.asset
+        for state in assets_at(load_current(ledger_path), "image_normalized")
+        if isinstance(state.asset, ImageAsset)
     ]
     if limit is not None:
         assets = assets[:limit]
@@ -43,9 +42,9 @@ def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSumm
     """Check for OCR results in GCS and return completed and pending image counts."""
     current = load_current(ledger_path)
     by_job: dict[tuple[str, str], list[str]] = {}
-    for asset_key, raw in current.items():
-        if raw.get("event") == "ocr_job_submitted":
-            by_job.setdefault((str(raw["job_id"]), str(raw["output_prefix"])), []).append(asset_key)
+    for asset_key, state in current.items():
+        if state.event == "ocr_job_submitted" and state.job_id and state.output_prefix:
+            by_job.setdefault((state.job_id, state.output_prefix), []).append(asset_key)
 
     client = storage.Client(project=config.gcs.project)
     completed = 0

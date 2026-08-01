@@ -2,32 +2,62 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from pathlib import Path
 import time
 
 from vie_doc_pipeline.ledger.jsonl import read_events
-from vie_doc_pipeline.models import LedgerEvent
+from vie_doc_pipeline.models import LedgerEvent, SourceAsset, source_asset_from_dict
 
-CurrentState = dict[str, dict[str, object]]
+
+@dataclass(frozen=True)
+class FailureState:
+    at: str
+    stage: str
+    error: str
+    retryable: bool
+    attempts: int
+    retry_not_before: float | None
+
+
+@dataclass(frozen=True)
+class CurrentAssetState:
+    event: str | None = None
+    at: str | None = None
+    asset: SourceAsset | None = None
+    failure: FailureState | None = None
+    inverted_override: bool = False
+    job_id: str | None = None
+    output_prefix: str | None = None
+    output_uris: tuple[str, ...] = ()
+
+
+CurrentState = dict[str, CurrentAssetState]
 
 
 def project_current(events: list[LedgerEvent]) -> CurrentState:
     """Project latest successful lifecycle state while retaining last failures."""
     states: CurrentState = {}
     for event in events:
-        state = states.setdefault(event.asset_key, {})
+        state = states.setdefault(event.asset_key, CurrentAssetState())
         if event.event == "failed":
-            state["failure"] = {"at": event.at, **event.data}
+            states[event.asset_key] = replace(state, failure=_failure_from_event(event))
             continue
         if event.event == "image_inverted":
-            state["inverted_override"] = True
+            states[event.asset_key] = replace(state, inverted_override=True)
             continue
         if event.event == "source_inverted":
             continue
-        state.pop("failure", None)
-        state["event"] = event.event
-        state["at"] = event.at
-        state.update(event.data)
+        states[event.asset_key] = replace(
+            state,
+            event=event.event,
+            at=event.at,
+            asset=_event_asset(event) or state.asset,
+            failure=None,
+            job_id=string_data(event, "job_id") or state.job_id,
+            output_prefix=string_data(event, "output_prefix") or state.output_prefix,
+            output_uris=tuple_data(event, "output_uris") or state.output_uris,
+        )
     return states
 
 
@@ -35,22 +65,47 @@ def load_current(path: Path) -> CurrentState:
     return project_current(read_events(path))
 
 
-def assets_at(current: CurrentState, event: str) -> list[dict[str, object]]:
-    return [state for state in current.values() if state.get("event") == event and "asset" in state]
+def assets_at(current: CurrentState, event: str) -> list[CurrentAssetState]:
+    return [state for state in current.values() if state.event == event and state.asset is not None]
 
 
-def eligible_source_assets(current: CurrentState, now: float | None = None) -> list[dict[str, object]]:
+def eligible_source_assets(current: CurrentState, now: float | None = None) -> list[CurrentAssetState]:
     """Select discovered source assets that are not permanently or temporarily deferred."""
     now = time.time() if now is None else now
-    eligible: list[dict[str, object]] = []
+    eligible: list[CurrentAssetState] = []
     for state in assets_at(current, "source_discovered"):
-        failure = state.get("failure")
-        if not isinstance(failure, dict):
+        failure = state.failure
+        if failure is None:
             eligible.append(state)
             continue
-        if not failure.get("retryable", True):
+        if not failure.retryable:
             continue
-        retry_not_before = failure.get("retry_not_before")
-        if retry_not_before is None or float(retry_not_before) <= now:
+        if failure.retry_not_before is None or failure.retry_not_before <= now:
             eligible.append(state)
     return eligible
+
+
+def _event_asset(event: LedgerEvent) -> SourceAsset | None:
+    asset = event.data.get("asset")
+    return source_asset_from_dict(asset) if isinstance(asset, dict) else None
+
+
+def _failure_from_event(event: LedgerEvent) -> FailureState:
+    return FailureState(
+        at=event.at,
+        stage=string_data(event, "stage") or "unknown",
+        error=string_data(event, "error") or "unknown",
+        retryable=bool(event.data.get("retryable", True)),
+        attempts=int(event.data.get("attempts", 1)),
+        retry_not_before=float(event.data["retry_not_before"]) if "retry_not_before" in event.data else None,
+    )
+
+
+def string_data(event: LedgerEvent, field: str) -> str | None:
+    value = event.data.get(field)
+    return str(value) if value is not None else None
+
+
+def tuple_data(event: LedgerEvent, field: str) -> tuple[str, ...]:
+    value = event.data.get(field)
+    return tuple(str(item) for item in value) if isinstance(value, list) else ()

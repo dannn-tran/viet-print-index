@@ -28,7 +28,7 @@ class JsonlLedgerTest(unittest.TestCase):
             lines = path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
-            self.assertEqual(load_current(path)[asset.key]["job_id"], "operation-1")
+            self.assertEqual(load_current(path)[asset.key].job_id, "operation-1")
             self.assertEqual(len(read_events(path)), 4)
 
     def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
@@ -40,8 +40,9 @@ class JsonlLedgerTest(unittest.TestCase):
             asset_key = "pub/issue/001"
             append_event(path, failed(asset_key, stage="download", error="temporary failure"))
             current = load_current(path)[asset_key]
-            self.assertEqual(current["event"], "source_discovered")
-            self.assertEqual(current["failure"]["stage"], "download")
+            self.assertEqual(current.event, "source_discovered")
+            self.assertIsNotNone(current.failure)
+            self.assertEqual(current.failure.stage if current.failure else None, "download")
 
     def test_permanent_failure_is_not_eligible_for_restart(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -58,4 +59,4 @@ class JsonlLedgerTest(unittest.TestCase):
             append_event(path, source_discovered(asset))
             append_event(path, failed(asset.key, stage="download", error="timeout"))
             append_event(path, source_downloaded(asset, checksum="checksum", size_bytes=10))
-            self.assertNotIn("failure", load_current(path)[asset.key])
+            self.assertIsNone(load_current(path)[asset.key].failure)

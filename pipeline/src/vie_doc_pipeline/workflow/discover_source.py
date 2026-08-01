@@ -19,12 +19,13 @@ def discover_source_assets(
     client = http_client(config.acquisition)
     try:
         current = load_current(ledger_path)
+        known_asset_keys = set(current)
         new_assets: list[SourceAsset] = []
         for item in islice(iter_source_items(config.source, client.fetch_text), limit):
             asset = asset_from_source_item(config, item)
-            if asset.key not in current:
+            if asset.key not in known_asset_keys:
                 append_event(ledger_path, source_discovered(asset))
-                current[asset.key] = {"asset": asset.to_dict(), "event": "source_discovered"}
+                known_asset_keys.add(asset.key)
                 new_assets.append(asset)
         return new_assets
     finally:

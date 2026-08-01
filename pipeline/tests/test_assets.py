@@ -62,7 +62,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             self.assertEqual(summary.created, 0)
             self.assertEqual(summary.native_registered, 1)
             self.assertEqual(client.bucket_instance.uploads, [])
-            self.assertEqual(load_current(ledger_path)[asset.key]["event"], "image_normalized")
+            self.assertEqual(load_current(ledger_path)[asset.key].event, "image_normalized")
 
     def test_native_image_path_prefers_human_issue_label(self) -> None:
         config = PipelineConfig(

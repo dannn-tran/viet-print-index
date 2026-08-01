@@ -11,6 +11,7 @@ from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.jsonl import append_event
 from vie_doc_pipeline.ledger.paths import default_ledger_path
 from vie_doc_pipeline.ledger.projection import load_current
+from vie_doc_pipeline.models import ImageAsset
 from vie_doc_pipeline.pipeline_config import load_config
 from vie_doc_pipeline.workflow.calibrate_images import run_image_calibration
 from vie_doc_pipeline.workflow.discover_source import discover_source_assets
@@ -37,8 +38,8 @@ _StateDir = Annotated[Path, typer.Option(help="Directory for inspectable JSONL s
 def status(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
     """Summarise current workflow lifecycle and review states."""
     current = load_current(default_ledger_path(pub_id, state_dir))
-    counts = Counter(str(item.get("event", "untracked")) for item in current.values() if "event" in item)
-    review = sum(1 for item in current.values() if item.get("needs_review"))
+    counts = Counter(item.event or "untracked" for item in current.values())
+    review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
     print(f"Assets      : {len(current)}")
     for event, count in sorted(counts.items()):
         print(f"  {event:<22} {count:>6}")
@@ -105,13 +106,12 @@ def images_normalize(
 def images_review(pub_id: _PubArg, state_dir: _StateDir = Path(".pipeline-state")) -> None:
     """List normalized images that were retained unchanged for manual review."""
     current = load_current(default_ledger_path(pub_id, state_dir))
-    flagged = [(key, item) for key, item in current.items() if item.get("needs_review")]
+    flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")
         return
     for key, item in flagged:
-        asset = item.get("asset", {})
-        source_id = asset.get("issue_id", "") if isinstance(asset, dict) else ""
+        source_id = item.asset.issue_id if isinstance(item.asset, ImageAsset) else ""
         print(f"{key}\n  vie-pipeline images normalize {pub_id} --source-id {source_id} --inverted")
 
 

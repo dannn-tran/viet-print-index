@@ -29,9 +29,3 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
         source_url=item.source_url,
         gcs_object=f"{config.gcs.pdf_prefix}/{filename}",
     )
-
-
-def asset_from_state(raw: dict[str, object]) -> SourceAsset:
-    asset = raw["asset"]
-    assert isinstance(asset, dict)
-    return PdfAsset.from_dict(asset) if asset.get("kind") == "pdf" else ImageAsset.from_dict(asset)

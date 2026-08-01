@@ -15,10 +15,9 @@ from google.cloud import storage
 from vie_doc_pipeline.explode_mem import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
 from vie_doc_pipeline.ledger.jsonl import append_event, read_events
-from vie_doc_pipeline.ledger.projection import assets_at, load_current
+from vie_doc_pipeline.ledger.projection import CurrentState, assets_at, load_current
 from vie_doc_pipeline.models import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.pipeline_config import PipelineConfig
-from vie_doc_pipeline.workflow.assets import asset_from_state
 from vie_doc_pipeline.workflow.image_processing import check_inversion, invert_image
 from vie_doc_pipeline.workflow.results import NormalizationSummary
 
@@ -61,14 +60,14 @@ def normalize_images(
 
 
 def iter_normalization_candidates(
-    current: dict[str, dict[str, object]],
+    current: CurrentState,
     source_id: str | None,
     image_key: str | None,
     limit: int | None,
 ) -> Iterator[SourceAsset]:
     """Yield source assets selected for normalisation or explicit reprocessing."""
     if not source_id and not image_key:
-        yield from islice(map(asset_from_state, assets_at(current, "source_downloaded")), limit)
+        yield from islice((state.asset for state in assets_at(current, "source_downloaded") if state.asset is not None), limit)
         return
 
     yield from islice(
@@ -78,13 +77,13 @@ def iter_normalization_candidates(
 
 
 def iter_selected_assets(
-    current: dict[str, dict[str, object]], source_id: str | None, image_key: str | None
+    current: CurrentState, source_id: str | None, image_key: str | None
 ) -> Iterator[SourceAsset]:
     """Yield explicitly selected assets without repeatedly decoding ledger data."""
-    for key, raw in current.items():
-        if "asset" not in raw or raw.get("event") not in {"source_downloaded", "image_normalized"}:
+    for key, state in current.items():
+        if state.asset is None or state.event not in {"source_downloaded", "image_normalized"}:
             continue
-        asset = asset_from_state(raw)
+        asset = state.asset
         if (source_id is not None and _source_id(asset) == source_id) or key == image_key:
             yield asset
 
