@@ -186,8 +186,8 @@ def _image_content_type(filename: str) -> str:
     return "image/png" if filename.endswith(".png") else "image/jpeg"
 
 
-def _source_id(asset: object) -> str:
-    return asset.document_id if hasattr(asset, "document_id") else asset.issue_id  # type: ignore[union-attr]
+def _source_id(asset: SourceAsset) -> str:
+    return asset.document_id if isinstance(asset, PdfAsset) else asset.issue_id
 
 
 def load_inversion_overrides(ledger_path: Path) -> InversionOverrides:

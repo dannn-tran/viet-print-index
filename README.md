@@ -92,6 +92,19 @@ vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
 vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
 ```
 
+### Workflow contracts
+
+- Source adapters only enumerate source items. They do not apply CLI batch
+  limits, write the ledger, or create GCS objects.
+- Each workflow stage applies `--limit` once, immediately after selecting its
+  candidate assets and before performing external work.
+- TOML is decoded into a validated source variant before discovery. A Veridian
+  source, a PDF index page, a URL sequence, a URL list, and a local directory
+  therefore cannot be confused at runtime.
+- JSONL is the durable, human-inspectable event format; Python projects it into
+  typed in-memory asset state for workflow decisions.
+- Workflows return typed summaries. The CLI alone prints human-facing output.
+
 ### Resilient acquisition
 
 HTTP acquisition is generic across source adapters. Configure bounded
