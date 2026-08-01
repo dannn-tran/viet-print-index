@@ -55,9 +55,9 @@ def project_current(events: list[LedgerEvent]) -> CurrentState:
             at=event.at,
             asset=_event_asset(event) or state.asset,
             failure=None,
-            job_id=string_data(event, "job_id") or state.job_id,
-            output_prefix=string_data(event, "output_prefix") or state.output_prefix,
-            output_uris=tuple_data(event, "output_uris") or state.output_uris,
+            job_id=_string_data(event, "job_id") or state.job_id,
+            output_prefix=_string_data(event, "output_prefix") or state.output_prefix,
+            output_uris=_tuple_data(event, "output_uris") or state.output_uris,
         )
     return states
 
@@ -94,19 +94,19 @@ def _event_asset(event: LedgerEvent) -> SourceAsset | None:
 def _failure_from_event(event: LedgerEvent) -> FailureState:
     return FailureState(
         at=event.at,
-        stage=string_data(event, "stage") or "unknown",
-        error=string_data(event, "error") or "unknown",
+        stage=_string_data(event, "stage") or "unknown",
+        error=_string_data(event, "error") or "unknown",
         retryable=bool(event.data.get("retryable", True)),
         attempts=int(event.data.get("attempts", 1)),
         retry_not_before=float(event.data["retry_not_before"]) if "retry_not_before" in event.data else None,
     )
 
 
-def string_data(event: LedgerEvent, field: str) -> str | None:
+def _string_data(event: LedgerEvent, field: str) -> str | None:
     value = event.data.get(field)
     return str(value) if value is not None else None
 
 
-def tuple_data(event: LedgerEvent, field: str) -> tuple[str, ...]:
+def _tuple_data(event: LedgerEvent, field: str) -> tuple[str, ...]:
     value = event.data.get(field)
     return tuple(str(item) for item in value) if isinstance(value, list) else ()

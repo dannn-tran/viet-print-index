@@ -29,10 +29,6 @@ from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian
 class UrlSequenceSourceItemProvider(SourceItemProvider):
     source: UrlSequencePdfSource
 
-    @classmethod
-    def from_source(cls, source: UrlSequencePdfSource) -> "UrlSequenceSourceItemProvider":
-        return cls(source)
-
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_url_sequence(
             self.source.base_url,
@@ -49,10 +45,6 @@ class UrlSequenceSourceItemProvider(SourceItemProvider):
 class UrlListSourceItemProvider(SourceItemProvider):
     source: UrlListPdfSource
 
-    @classmethod
-    def from_source(cls, source: UrlListPdfSource) -> "UrlListSourceItemProvider":
-        return cls(source)
-
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_url_list(self.source.urls)
 
@@ -63,10 +55,6 @@ class UrlListSourceItemProvider(SourceItemProvider):
 @dataclass(frozen=True)
 class LocalDirectorySourceItemProvider(SourceItemProvider):
     source: LocalPdfSource
-
-    @classmethod
-    def from_source(cls, source: LocalPdfSource) -> "LocalDirectorySourceItemProvider":
-        return cls(source)
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_local_directory(self.source.path)
@@ -119,11 +107,11 @@ def open_source_items(config: PipelineConfig) -> Iterator[SourceItemProvider]:
         case WebPagePdfSource() as source:
             provider = WebPageSourceItemProvider.open(source, config)
         case UrlSequencePdfSource() as source:
-            provider = UrlSequenceSourceItemProvider.from_source(source)
+            provider = UrlSequenceSourceItemProvider(source)
         case UrlListPdfSource() as source:
-            provider = UrlListSourceItemProvider.from_source(source)
+            provider = UrlListSourceItemProvider(source)
         case LocalPdfSource() as source:
-            provider = LocalDirectorySourceItemProvider.from_source(source)
+            provider = LocalDirectorySourceItemProvider(source)
     try:
         yield provider
     finally:
