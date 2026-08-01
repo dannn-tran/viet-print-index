@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -17,6 +18,7 @@ def _append_event(path: Path, event: LedgerEvent) -> None:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n")
             handle.flush()
+            os.fsync(handle.fileno())
 
 
 def _read_events(path: Path) -> Iterator[LedgerEvent]:

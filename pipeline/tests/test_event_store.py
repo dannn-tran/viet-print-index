@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,3 +22,29 @@ class EventStoreTest(unittest.TestCase):
             state.record(image_normalized(asset))
             self.assertEqual(state.current[asset.key].event, "image_normalized")
             self.assertEqual(len(list(store.read_events())), 2)
+
+    def test_concurrent_appends_remain_parseable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore.open(Path(directory) / "state.jsonl")
+            events = [
+                source_discovered(ImageAsset("pub", "issue", str(index), f"https://example.test/{index}.jpg", f"pub/{index}.jpg"))
+                for index in range(40)
+            ]
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(store.append, events))
+
+            self.assertEqual(len(list(store.read_events())), len(events))
+
+    def test_replay_repairs_an_incomplete_final_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.jsonl"
+            store = EventStore.open(path)
+            asset = ImageAsset("pub", "issue", "001", "https://example.test/1.jpg", "pub/1.jpg")
+            store.append(source_discovered(asset))
+            with path.open("ab") as handle:
+                handle.write(b'{"event":"source_discovered"')
+
+            state = AppState.replay(store)
+
+            self.assertTrue(state.current[asset.key].asset)
+            self.assertEqual(len(list(store.read_events())), 1)

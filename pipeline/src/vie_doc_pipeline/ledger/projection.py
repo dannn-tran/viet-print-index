@@ -45,6 +45,7 @@ class AppState:
     @classmethod
     def replay(cls, event_store: EventStore) -> "AppState":
         """Rebuild current state by applying persisted events in order."""
+        event_store.repair_trailing_record()
         current: CurrentState = {}
         for event in event_store.read_events():
             current = apply_event(current, event)

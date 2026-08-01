@@ -20,6 +20,7 @@ def ensure_config_compatible(event_store: EventStore, snapshot: ConfigSnapshot |
     if hashlib.sha256(snapshot.toml.encode("utf-8")).hexdigest() != snapshot.sha256:
         raise ConfigMismatchError("Current TOML configuration does not match its SHA-256")
 
+    event_store.repair_trailing_record()
     has_events = False
     records: set[tuple[str, str]] = set()
     for event in event_store.read_events():

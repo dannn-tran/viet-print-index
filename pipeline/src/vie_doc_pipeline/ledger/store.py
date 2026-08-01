@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from contextlib import contextmanager
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -10,6 +13,8 @@ from pathlib import Path
 from vie_doc_pipeline.ledger.events import LedgerEvent
 from vie_doc_pipeline.ledger.jsonl import _append_event, _read_events
 from vie_doc_pipeline.ledger.locking import advisory_file_lock
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -30,6 +35,27 @@ class EventStore:
     def append(self, event: LedgerEvent) -> None:
         """Append one event atomically with the store's file lock."""
         _append_event(self._path, event)
+
+    def repair_trailing_record(self) -> bool:
+        """Discard an incomplete final record left by an interrupted append."""
+        if not self._path.exists():
+            return False
+        with advisory_file_lock(self._path.with_suffix(self._path.suffix + ".lock")):
+            with self._path.open("rb+") as handle:
+                content = handle.read()
+                if not content or content.endswith(b"\n"):
+                    return False
+                start = content.rfind(b"\n") + 1
+                try:
+                    event = json.loads(content[start:].decode("utf-8"))
+                    LedgerEvent.from_dict(event)
+                except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                    handle.truncate(start)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                    logger.warning("Removed incomplete final event record from %s", self._path)
+                    return True
+                return False
 
     @contextmanager
     def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
