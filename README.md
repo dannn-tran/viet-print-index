@@ -189,8 +189,9 @@ vie-pipeline status nlv-cuu-quoc
 
 The source config must provide `type = "veridian"`, `catalogue_url`,
 `image_server_url`, the NLV `title_id`, and an inclusive `from_date`/`to_date`.
-`source discover` follows the title calendar and
-month listings, records each source image in `.pipeline-state/v2/<pub>.jsonl`, and
+`source discover` requests Veridian's complete issue catalogue (`ai=1`), filters
+the direct issue links to the configured date range, records each source image in
+`.pipeline-state/v2/<pub>.jsonl`, and
 `source download` requests each complete page as one JPEG. Review collection terms and
 retain a conservative request delay before widening a run.
 

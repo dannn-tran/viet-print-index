@@ -3,7 +3,7 @@ from itertools import islice
 import unittest
 
 from vie_doc_pipeline.pipeline_config import VeridianSource
-from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian, issues_from_month_html, month_urls, page_image_url, parse_pages
+from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian, issues_from_catalogue_html, page_image_url, parse_pages
 
 
 class VeridianParsingTest(unittest.TestCase):
@@ -18,14 +18,9 @@ class VeridianParsingTest(unittest.TestCase):
         self.assertEqual([page.filename for page in pages], ["001.jpg", "002.jpg"])
         self.assertEqual((pages[0].width, pages[0].height), (1890, 2602))
 
-    def test_month_and_issue_discovery(self) -> None:
-        title_html = (
-            '<a href="/baochi/cgi-bin/baochi?a=cl&amp;cl=CL2.1951.01&amp;sp=WNyf&amp;e=x">T01</a>'
-        )
-        months = month_urls(title_html, "http://example.test/baochi/cgi-bin/baochi", "WNyf")
-        self.assertEqual(months, [(1951, 1, "http://example.test/baochi/cgi-bin/baochi?a=cl&cl=CL2.1951.01&sp=WNyf&e=x")])
-        month_html = '<a href="?a=d&amp;d=WNyf19510101&amp;e=x">1 Tháng Một</a>'
-        issues = issues_from_month_html(month_html, "WNyf")
+    def test_parses_issue_links_from_complete_catalogue(self) -> None:
+        catalogue_html = '<a href="?a=d&amp;d=WNyf19510101&amp;e=x">1 Tháng Một</a>'
+        issues = issues_from_catalogue_html(catalogue_html, "WNyf")
         self.assertEqual(issues[0].published_on, date(1951, 1, 1))
 
     def test_full_page_url_uses_native_crop(self) -> None:
@@ -48,8 +43,6 @@ class VeridianParsingTest(unittest.TestCase):
         def fetch(url: str) -> str:
             requested.append(url)
             if "cl=CL1" in url:
-                return '<a href="?a=cl&amp;cl=CL2.1951.01&amp;sp=WNyf">Jan</a>'
-            if "cl=CL2.1951.01" in url:
                 return '<a href="?a=d&amp;d=WNyf19510101">1</a><a href="?a=d&amp;d=WNyf19510102">2</a>'
             return "var documentOID = 'WNyf19510101'; var pageImageSizes = { '1.1':{'w':10,'h':20} };"
 
@@ -57,6 +50,7 @@ class VeridianParsingTest(unittest.TestCase):
 
         self.assertEqual(len(pages), 1)
         self.assertEqual(pages[0].issue_label, "1951-01-01_WNyf19510101")
+        self.assertTrue(any("ai=1" in url for url in requested))
         self.assertEqual(sum("a=d" in url for url in requested), 1)
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import re
 import urllib.parse
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from itertools import chain
@@ -18,7 +18,6 @@ from itertools import chain
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import VeridianSource
 
-_MONTH_LINK_RE = re.compile(r'href="([^"]*a=cl[^" ]*cl=CL2\.(\d{4})\.(\d{2})[^" ]*)"')
 _ISSUE_RE = re.compile(r"[?&]d=([A-Za-z0-9]+\d{8})")
 _DOCUMENT_OID_RE = re.compile(r"var documentOID = '([^']+)'\s*;")
 _PAGE_SIZE_RE = re.compile(r"'([0-9]+\.[0-9]+)':\{'w':(\d+),'h':(\d+)\}")
@@ -52,13 +51,8 @@ def iter_source_items_from_veridian(
 ) -> Iterator[DiscoveredSourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
     catalogue_url = config.catalogue_url.rstrip("/")
-    title_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id))
-    month_htmls = (
-        fetch_text(month_url)
-        for year, month, month_url in month_urls(title_html, catalogue_url, config.title_id)
-        if month_overlaps(year, month, config.from_date, config.to_date)
-    )
-    issues = iter_catalogue_issues(month_htmls, config.title_id, config.from_date, config.to_date)
+    catalogue_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id, ai="1"))
+    issues = iter_catalogue_issues(catalogue_html, config.title_id, config.from_date, config.to_date)
     issue_htmls = (
         (issue, fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid)))
         for issue in issues
@@ -71,15 +65,14 @@ def iter_source_items_from_veridian(
 
 
 def iter_catalogue_issues(
-    month_htmls: Iterable[str],
+    catalogue_html: str,
     title_id: str,
     from_date: date | None,
     to_date: date | None,
 ) -> Iterator[Issue]:
-    """Yield in-range issues parsed from the supplied monthly catalogue HTML."""
-    for month_html in month_htmls:
-        issues = sorted(issues_from_month_html(month_html, title_id), key=lambda issue: issue.published_on)
-        yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), issues)
+    """Yield in-range issues parsed from one complete Veridian catalogue page."""
+    issues = sorted(issues_from_catalogue_html(catalogue_html, title_id), key=lambda issue: issue.published_on)
+    yield from filter(lambda issue: in_range(issue.published_on, from_date, to_date), issues)
 
 
 def iter_issue_pages(
@@ -123,29 +116,15 @@ def parse_pages(issue_html: str, expected_issue_oid: str) -> list[Page]:
     return pages
 
 
-def month_urls(title_html: str, catalogue_url: str, title_id: str) -> list[tuple[int, int, str]]:
-    result: dict[tuple[int, int], str] = {}
-    for href, year, month in _MONTH_LINK_RE.findall(html.unescape(title_html)):
-        if f"sp={title_id}" in href:
-            result[(int(year), int(month))] = urllib.parse.urljoin(catalogue_url, href)
-    return [(year, month, url) for (year, month), url in sorted(result.items())]
-
-
-def issues_from_month_html(month_html: str, title_id: str) -> list[Issue]:
+def issues_from_catalogue_html(catalogue_html: str, title_id: str) -> list[Issue]:
     issues: dict[str, Issue] = {}
-    for oid in _ISSUE_RE.findall(html.unescape(month_html)):
+    for oid in _ISSUE_RE.findall(html.unescape(catalogue_html)):
         if oid.startswith(title_id):
             try:
                 issues[oid] = Issue(oid, date.fromisoformat(f"{oid[-8:-4]}-{oid[-4:-2]}-{oid[-2:]}"))
             except ValueError:
                 pass
     return list(issues.values())
-
-
-def month_overlaps(year: int, month: int, from_date: date | None, to_date: date | None) -> bool:
-    first = date(year, month, 1)
-    next_month = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
-    return (not to_date or first <= to_date) and (not from_date or next_month > from_date)
 
 
 def in_range(value: date, from_date: date | None, to_date: date | None) -> bool:
