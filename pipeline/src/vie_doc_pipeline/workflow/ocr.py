@@ -2,6 +2,8 @@
 
 from pathlib import Path
 from itertools import islice
+from contextlib import contextmanager
+from dataclasses import dataclass
 
 from google.cloud import storage
 
@@ -39,25 +41,44 @@ def submit_ocr_jobs(config: PipelineConfig, ledger_path: Path, limit: int | None
 
 def check_ocr_status(config: PipelineConfig, ledger_path: Path) -> OcrStatusSummary:
     """Check for OCR results in GCS and return completed and pending image counts."""
-    current = load_current(ledger_path)
-    by_job: dict[tuple[str, str], list[str]] = {}
-    for asset_key, state in current.items():
-        if state.event == "ocr_job_submitted" and state.job_id and state.output_prefix:
-            by_job.setdefault((state.job_id, state.output_prefix), []).append(asset_key)
+    with open_ocr_status_session(config, ledger_path) as session:
+        return session.check()
 
-    client = storage.Client(project=config.gcs.project)
-    completed = 0
-    pending = 0
-    for (_, output_prefix), asset_keys in by_job.items():
+
+@dataclass
+class OcrStatusSession:
+    ledger_path: Path
+    client: storage.Client
+
+    def check(self) -> OcrStatusSummary:
+        current = load_current(self.ledger_path)
+        by_job: dict[tuple[str, str], list[str]] = {}
+        for asset_key, state in current.items():
+            if state.event == "ocr_job_submitted" and state.job_id and state.output_prefix:
+                by_job.setdefault((state.job_id, state.output_prefix), []).append(asset_key)
+        completed = pending = 0
+        for (_, output_prefix), asset_keys in by_job.items():
+            output_uris = self.output_uris(output_prefix)
+            if output_uris:
+                for event in ocr_output_available(asset_keys, output_uris=output_uris):
+                    append_event(self.ledger_path, event)
+                completed += len(asset_keys)
+            else:
+                pending += len(asset_keys)
+        return OcrStatusSummary(completed, pending)
+
+    def output_uris(self, output_prefix: str) -> list[str]:
         bucket_name, object_prefix = _parse_gs_uri(output_prefix)
-        output_uris = [f"gs://{bucket_name}/{blob.name}" for blob in client.list_blobs(bucket_name, prefix=object_prefix)]
-        if output_uris:
-            for event in ocr_output_available(asset_keys, output_uris=output_uris):
-                append_event(ledger_path, event)
-            completed += len(asset_keys)
-        else:
-            pending += len(asset_keys)
-    return OcrStatusSummary(completed, pending)
+        return [f"gs://{bucket_name}/{blob.name}" for blob in self.client.list_blobs(bucket_name, prefix=object_prefix)]
+
+
+@contextmanager
+def open_ocr_status_session(config: PipelineConfig, ledger_path: Path):
+    client = storage.Client(project=config.gcs.project)
+    try:
+        yield OcrStatusSession(ledger_path, client)
+    finally:
+        client.close()
 
 
 def _parse_gs_uri(uri: str) -> tuple[str, str]:
