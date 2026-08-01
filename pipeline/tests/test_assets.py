@@ -54,6 +54,20 @@ class AssetDiscoveryTest(unittest.TestCase):
             self.assertEqual(client.bucket_instance.uploads, [])
             self.assertEqual(load_current(ledger_path)[asset.key]["event"], "image_normalized")
 
+    def test_native_image_path_prefers_human_issue_label(self) -> None:
+        config = PipelineConfig(
+            publication=PublicationConfig(id="cuu-quoc", name="Cứu Quốc"),
+            gcs=GcsConfig("project", "bucket", "cuu-quoc/pdf", "cuu-quoc/images", "cuu-quoc/ocr"),
+            source=SourceConfig(type="veridian"),
+            explode=ExplodeParams(),
+            ocr=OcrConfig(),
+        )
+        item = Mock(kind="image", issue_id="WNyf19450905", issue_label="1945-09-05--WNyf19450905", page_id="001", source_url="https://example.test/001.jpg", width=10, height=20)
+
+        asset = asset_from_source_item(config, item)
+
+        self.assertEqual(asset.gcs_object, "cuu-quoc/images/1945-09-05--WNyf19450905/001.jpg")
+
     def test_discovery_does_not_overwrite_existing_ledger_state(self) -> None:
         config = PipelineConfig(
             publication=PublicationConfig(id="doi-moi", name="Đời Mới"),

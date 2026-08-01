@@ -21,6 +21,7 @@ class DiscoveredSourceItem:
     kind: AssetKind
     source_url: str
     issue_id: str | None = None
+    issue_label: str | None = None
     page_id: str | None = None
     width: int | None = None
     height: int | None = None
@@ -65,6 +66,7 @@ class ImageAsset:
     kind: AssetKind = "image"
     width: int | None = None
     height: int | None = None
+    issue_label: str | None = None
     inverted: bool = False
     needs_review: bool = False
 
@@ -86,6 +88,7 @@ class ImageAsset:
             kind=str(raw.get("kind", "image")),  # type: ignore[arg-type]
             width=int(raw["width"]) if raw.get("width") is not None else None,
             height=int(raw["height"]) if raw.get("height") is not None else None,
+            issue_label=str(raw["issue_label"]) if raw.get("issue_label") is not None else None,
             inverted=bool(raw.get("inverted", False)),
             needs_review=bool(raw.get("needs_review", False)),
         )

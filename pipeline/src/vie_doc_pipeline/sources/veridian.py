@@ -79,6 +79,7 @@ def iter_pages(
                     kind="image",
                     source_url=page_image_url(config.image_server_url, page),
                     issue_id=issue.oid,
+                    issue_label=f"{issue.published_on.isoformat()}--{issue.oid}",
                     page_id=page.page_id,
                     width=page.width,
                     height=page.height,

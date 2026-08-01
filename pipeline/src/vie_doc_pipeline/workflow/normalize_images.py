@@ -64,6 +64,7 @@ def normalize_images(
                     page_id=PurePosixPath(filename).stem,
                     source_url=asset.source_url,
                     gcs_object=f"{config.gcs.images_prefix}/{asset.document_id}/{filename}",
+                    issue_label=asset.document_id,
                 )
                 image = _normalize_bytes(image, image_bytes, filename, _is_forced_inverted(ledger_path, image))
                 blob = bucket.blob(image.gcs_object)
@@ -112,5 +113,6 @@ def _normalize_bytes(asset: ImageAsset, data: bytes, filename: str, forced_inver
         gcs_object=str(PurePosixPath(asset.gcs_object).with_name(f"{stem}-inverted{suffix}")),
         width=asset.width,
         height=asset.height,
+        issue_label=asset.issue_label,
         inverted=True,
     )

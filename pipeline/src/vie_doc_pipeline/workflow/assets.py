@@ -16,9 +16,10 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
             issue_id=item.issue_id,
             page_id=item.page_id,
             source_url=item.source_url,
-            gcs_object=f"{config.gcs.images_prefix}/{item.issue_id}/{item.page_id}.jpg",
+            gcs_object=f"{config.gcs.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
             width=item.width,
             height=item.height,
+            issue_label=item.issue_label,
         )
     filename = PurePosixPath(urllib.parse.urlsplit(item.source_url).path).name or PurePosixPath(item.source_url).name
     document_id = urllib.parse.unquote(filename).removesuffix(".pdf")

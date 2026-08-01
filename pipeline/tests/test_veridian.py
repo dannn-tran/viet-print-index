@@ -56,6 +56,7 @@ class VeridianParsingTest(unittest.TestCase):
         pages = discover_pages(config, fetch, limit=1)
 
         self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0].issue_label, "1951-01-01--WNyf19510101")
         self.assertEqual(sum("a=d" in url for url in requested), 1)
 
 
