@@ -11,12 +11,13 @@ import html
 import logging
 import re
 import urllib.parse
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 
 from vie_doc_pipeline.models import DiscoveredSourceItem
 from vie_doc_pipeline.pipeline_config import VeridianSource
+from vie_doc_pipeline.sources.http import HttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +50,16 @@ class Page:
 
 def iter_source_items_from_veridian(
     config: VeridianSource,
-    fetch_text: Callable[[str], str],
+    http: HttpClient,
 ) -> Iterator[DiscoveredSourceItem]:
     """Discover native full-page images from a configured Veridian catalogue."""
     catalogue_url = config.catalogue_url.rstrip("/")
-    catalogue_html = fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id, ai="1"))
+    catalogue_html = http.fetch_text(catalogue_url_for(catalogue_url, a="cl", cl="CL1", sp=config.title_id, ai="1"))
     issues = sorted(issues_from_catalogue_html(catalogue_html, config.title_id), key=lambda issue: issue.published_on)
     for issue in issues:
         if not config.from_date <= issue.published_on <= config.to_date:
             continue
-        issue_html = fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
+        issue_html = http.fetch_text(catalogue_url_for(catalogue_url, a="d", d=issue.oid))
         for page in parse_pages(issue_html, issue.oid):
             yield DiscoveredSourceItem(
                 kind="image",

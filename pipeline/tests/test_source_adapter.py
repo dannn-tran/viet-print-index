@@ -1,8 +1,12 @@
+from datetime import date
+from itertools import islice
 import unittest
+from unittest.mock import patch
 
-from vie_doc_pipeline.pipeline_config import UrlSequencePdfSource
+from vie_doc_pipeline.explode_mem import ExplodeParams
+from vie_doc_pipeline.pipeline_config import GcsConfig, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.sources.http import encode_url
-from vie_doc_pipeline.sources.discover import iter_source_items
+from vie_doc_pipeline.sources.discover import open_source_items
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -28,8 +32,58 @@ class SourceAdapterTest(unittest.TestCase):
             extra_urls=("https://example.test/issues/001-002.pdf",),
         )
 
-        self.assertEqual([item.source_url for item in iter_source_items(config, lambda _: "")], [
+        pipeline_config = PipelineConfig(
+            publication=PublicationConfig("pub", "Publication"),
+            gcs=GcsConfig("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
+            source=config,
+            explode=ExplodeParams(),
+            ocr=OcrConfig(),
+        )
+
+        with patch("vie_doc_pipeline.sources.discover.http_client") as open_http:
+            with open_source_items(pipeline_config) as source_items:
+                urls = [item.source_url for item in source_items.iter_source_items()]
+
+        open_http.assert_not_called()
+
+        self.assertEqual(urls, [
             "https://example.test/issues/001.pdf",
             "https://example.test/issues/002.pdf",
             "https://example.test/issues/001-002.pdf",
         ])
+
+    def test_factory_opens_and_closes_http_only_for_network_discovery(self) -> None:
+        config = PipelineConfig(
+            publication=PublicationConfig("pub", "Publication"),
+            gcs=GcsConfig("project", "bucket", "pub/pdf", "pub/images", "pub/ocr"),
+            source=VeridianSource(
+                "https://example.test/catalogue",
+                "https://example.test/images",
+                "WNyf",
+                date(1951, 1, 1),
+                date(1951, 1, 31),
+            ),
+            explode=ExplodeParams(),
+            ocr=OcrConfig(),
+        )
+        http = _FakeHttpClient()
+
+        with patch("vie_doc_pipeline.sources.discover.http_client", return_value=http) as open_http:
+            with open_source_items(config) as source_items:
+                self.assertEqual(len(list(islice(source_items.iter_source_items(), 1))), 1)
+
+        open_http.assert_called_once_with(config.acquisition)
+        self.assertTrue(http.closed)
+
+
+class _FakeHttpClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def fetch_text(self, url: str) -> str:
+        if "cl=CL1" in url:
+            return '<a href="?a=d&amp;d=WNyf19510101">1</a>'
+        return "var documentOID = 'WNyf19510101'; var pageImageSizes = { '1.1':{'w':10,'h':20} };"
+
+    def close(self) -> None:
+        self.closed = True

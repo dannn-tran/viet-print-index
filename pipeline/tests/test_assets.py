@@ -1,4 +1,5 @@
 import unittest
+from contextlib import nullcontext
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -89,7 +90,10 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
-            with patch("vie_doc_pipeline.workflow.discover_source.iter_source_items", return_value=[source_item]):
+            with patch(
+                "vie_doc_pipeline.workflow.discover_source.open_source_items",
+                return_value=nullcontext(_FakeSourceItemProvider([source_item])),
+            ):
                 self.assertEqual(len(discover_source_assets(config, ledger_path)), 1)
                 self.assertEqual(discover_source_assets(config, ledger_path), [])
 
@@ -107,7 +111,10 @@ class AssetDiscoveryTest(unittest.TestCase):
         ]
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
-            with patch("vie_doc_pipeline.workflow.discover_source.iter_source_items", return_value=source_items):
+            with patch(
+                "vie_doc_pipeline.workflow.discover_source.open_source_items",
+                return_value=nullcontext(_FakeSourceItemProvider(source_items)),
+            ):
                 self.assertEqual(len(discover_source_assets(config, ledger_path, limit=1)), 1)
 
 
@@ -137,3 +144,11 @@ class _FakeStorageClient:
 
     def bucket(self, name: str) -> _FakeBucket:
         return self.bucket_instance
+
+
+class _FakeSourceItemProvider:
+    def __init__(self, items: list[object]) -> None:
+        self.items = items
+
+    def iter_source_items(self):
+        return iter(self.items)
