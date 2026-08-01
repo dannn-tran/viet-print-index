@@ -14,12 +14,12 @@ from vie_doc_pipeline.pipeline_config import (
     WebPagePdfSource,
 )
 from vie_doc_pipeline.sources.pdf import (
-    iter_local_pdf_items,
-    iter_url_list_pdf_items,
-    iter_url_sequence_pdf_items,
-    iter_web_page_pdf_items,
+    iter_source_items_from_local_directory,
+    iter_source_items_from_url_list,
+    iter_source_items_from_url_sequence,
+    iter_source_items_from_web_page,
 )
-from vie_doc_pipeline.sources.veridian import iter_pages
+from vie_doc_pipeline.sources.veridian import iter_source_items_from_veridian
 
 
 def iter_source_items(
@@ -28,17 +28,17 @@ def iter_source_items(
     """Yield all source items for one already-validated source configuration."""
     match config:
         case VeridianSource():
-            yield from iter_pages(config, fetch_text)
+            yield from iter_source_items_from_veridian(config, fetch_text)
         case WebPagePdfSource():
-            yield from iter_web_page_pdf_items(config.page_url, fetch_text(config.page_url))
+            yield from iter_source_items_from_web_page(config.page_url, fetch_text(config.page_url))
         case UrlSequencePdfSource():
-            yield from iter_url_sequence_pdf_items(
+            yield from iter_source_items_from_url_sequence(
                 config.base_url,
                 config.pattern,
                 config.issue_range,
                 config.extra_urls,
             )
         case UrlListPdfSource():
-            yield from iter_url_list_pdf_items(config.urls)
+            yield from iter_source_items_from_url_list(config.urls)
         case LocalPdfSource():
-            yield from iter_local_pdf_items(config.path)
+            yield from iter_source_items_from_local_directory(config.path)

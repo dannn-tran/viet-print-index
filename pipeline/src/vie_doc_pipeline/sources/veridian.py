@@ -46,7 +46,7 @@ class Page:
         return self.page_id + ".jpg"
 
 
-def iter_pages(
+def iter_source_items_from_veridian(
     config: VeridianSource,
     fetch_text: Callable[[str], str],
 ) -> Iterator[DiscoveredSourceItem]:
