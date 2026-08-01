@@ -7,9 +7,10 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 ## Architecture
 
 ```
-[sources/]          [vie-pipeline CLI]               [GCS bucket]
-  *.toml  ──────►  staged source/OCR workflow ─────► <pub>/pdf/, images/, ocr/
-  (per-pub config)                                               │
+[sources/]          [vie-pipeline]                   [GCS bucket]
+  *.toml  ──────►  source discover/download  ─────► original assets
+  (per-pub config) images normalize          ─────► image assets
+                    OCR submit/check          ─────► OCR JSON
                                                            │
                                             [vpi CLI]      │
                                             index gcs ◄────┘
@@ -27,7 +28,7 @@ Two toolchains, one contract. GCS is the durable store and the handoff point bet
 
 | Toolchain | Responsibilities |
 |-----------|-----------------|
-| **Python** (`vie-pipeline`) | Discover PDF URLs, download/upload PDFs, explode PDFs→images, submit GCV OCR |
+| **Python** (`vie-pipeline`) | Acquire source assets, normalize durable presentation/OCR images, manage GCV OCR jobs |
 | **Scala** (`vpi`) | Stream OCR JSON → SQLite FTS5, keyword search, full-text retrieval, browse |
 
 ---
@@ -68,7 +69,7 @@ Each publication has a config file in `sources/<id>.toml`. Current publications:
 ### Adding a new publication
 
 1. Create `sources/<id>.toml` (copy an existing one as template)
-2. Calibrate extraction params: `vie-pipeline calibrate <id> --pdf <sample.pdf>`
+2. Calibrate PDF extraction: `vie-pipeline images calibrate <id> --pdf <sample.pdf>`
 3. Review `calibrate/<id>/` variants, update `[explode]` section in TOML
 4. Run the pipeline (see below)
 
@@ -81,19 +82,30 @@ All commands run from the repo root. Replace `<pub-id>` with a publication ID fr
 ### Preferred staged workflow
 
 All source types use the same resumable workflow, backed by an append-only
-JSONL ledger at `.pipeline-state/<pub>.jsonl`:
+JSONL ledger at `.pipeline-state/v2/<pub>.jsonl`:
 
 ```sh
-vie-pipeline discover <pub-id>      # find source PDFs or native page images
-vie-pipeline fetch <pub-id>         # store source assets in GCS
-vie-pipeline materialize <pub-id>   # explode PDFs; record native images in place
-vie-pipeline ocr submit <pub-id>    # submit only materialized page images
-vie-pipeline ocr reconcile <pub-id> # check asynchronous OCR outputs
+vie-pipeline source discover <pub-id>  # enumerate original source records
+vie-pipeline source download <pub-id>  # acquire originals into GCS
+vie-pipeline images normalize <pub-id> # create presentation/OCR image assets
+vie-pipeline ocr submit-jobs <pub-id>  # start asynchronous OCR jobs
+vie-pipeline ocr check-status <pub-id> # report completed/pending OCR output
 ```
 
-`materialize` never copies image-native sources: their fetched GCS object is
-recorded directly as the OCR-ready page. PDF sources create page images under
-`<pub>/images/` at this step. Index OCR after reconciliation with `vpi index gcs`.
+An `ImageAsset` may be a page, spread, cover, or other scanned unit. Native
+images that need no correction remain at their original GCS object; PDF sources
+produce derived images. These image assets are the shared coordinate canvas for
+presentation and OCR overlays.
+
+`images normalize` checks every image for likely inverted colours. Ambiguous
+images are retained unchanged and listed by `images review`; use `--inverted`
+for an issue/PDF or a specific image when correction is needed:
+
+```sh
+vie-pipeline images review <pub-id>
+vie-pipeline images normalize <pub-id> --source-id <issue-or-pdf-id> --inverted
+vie-pipeline images normalize <pub-id> --image-id <ledger-image-key> --inverted
+```
 
 ### Index OCR → SQLite
 
@@ -117,48 +129,40 @@ vie-pipeline status <pub-id>
 
 Some sources use the National Library of Vietnam's Veridian viewer rather
 than PDFs. It is an image-native source and therefore follows the same staged
-workflow as every other source. Its `materialize` stage records each fetched
-full-page JPEG in place, without creating a second image object.
+workflow as every other source. A native full-page JPEG that does not need
+normalization is registered in place, without a duplicate GCS object.
 
 ```sh
-# Discover full-page assets into an inspectable state ledger
-vie-pipeline discover nlv-cuu-quoc --limit 10
+# Discover full-page source assets into an inspectable v2 ledger
+vie-pipeline source discover nlv-cuu-quoc --limit 10
 
-# Fetch only discovered-but-unfetched assets.
-vie-pipeline fetch nlv-cuu-quoc --limit 10
+# Download only discovered-but-undownloaded originals.
+vie-pipeline source download nlv-cuu-quoc --limit 10
 
-# Native images are marked OCR-ready without copying them.
-vie-pipeline materialize nlv-cuu-quoc
+# Inspect and register native images for presentation and OCR.
+vie-pipeline images normalize nlv-cuu-quoc
 
-# Submit quickly, then reconcile later. Neither command blocks on long OCR work.
-vie-pipeline ocr submit nlv-cuu-quoc
-vie-pipeline ocr reconcile nlv-cuu-quoc
+# Submit quickly, then check later. Neither command waits for long OCR work.
+vie-pipeline ocr submit-jobs nlv-cuu-quoc
+vie-pipeline ocr check-status nlv-cuu-quoc
 
-# Inspect the append-only JSONL ledger and its reconstructed current state.
-vie-pipeline state nlv-cuu-quoc
+# Inspect projected lifecycle and image-review state.
+vie-pipeline status nlv-cuu-quoc
 ```
 
 The source config must provide `type = "veridian"`, `catalogue_url`,
 `image_server_url`, the NLV `title_id`, and an inclusive `from_date`/`to_date`.
-`discover` follows the title calendar and
-month listings, records each source page in `.pipeline-state/<pub>.jsonl`, and
-`fetch` requests each complete page as one JPEG. Review collection terms and
+`source discover` follows the title calendar and
+month listings, records each source image in `.pipeline-state/v2/<pub>.jsonl`, and
+`source download` requests each complete page as one JPEG. Review collection terms and
 retain a conservative request delay before widening a run.
-
-```
-Publication : Thanh Nghi (thanh-nghi)
-GCS bucket  : gs://vie-doc
-  PDFs      :    120  (thanh-nghi/pdf/)
-  Exploded  :    120  (thanh-nghi/images/)
-  OCR blobs :   1500  (thanh-nghi/ocr-outputs/)
-```
 
 ### Calibrate extraction params
 
-Before running `explode` on a new publication, calibrate the extraction params:
+Before normalizing a PDF collection, inspect image derivation variants:
 
 ```sh
-vie-pipeline calibrate <pub-id> --pdf <path/to/sample.pdf>
+vie-pipeline images calibrate <pub-id> --pdf <path/to/sample.pdf>
 ```
 
 Outputs 5 image variants to `calibrate/<pub-id>/<stem>/`:
@@ -171,7 +175,7 @@ Outputs 5 image variants to `calibrate/<pub-id>/<stem>/`:
 | `render+no-text/` | Rasterise with digital text layer removed |
 | `render+no-text+negate/` | Both of the above |
 
-Also prints heuristic suggestions (detected text layers, dark backgrounds, rotated pages). Update `[explode]` in the publication TOML based on what looks best.
+Also prints heuristic suggestions for PDF rendering options (detected text layers and rotated pages). Update `[explode]` in the publication TOML based on what looks best; per-image inversion is handled by `images normalize`.
 
 ---
 
