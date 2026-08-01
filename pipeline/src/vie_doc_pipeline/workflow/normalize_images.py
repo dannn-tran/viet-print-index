@@ -34,7 +34,7 @@ class InversionOverrides:
 
 @dataclass(frozen=True)
 class AllNormalizationCandidates:
-    pass
+    """Select every source asset not yet normalized."""
 
 
 @dataclass(frozen=True)
