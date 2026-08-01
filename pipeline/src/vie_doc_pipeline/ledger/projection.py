@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from pathlib import Path
 import time
 
 from vie_doc_pipeline.ledger.events import LedgerEvent
@@ -82,19 +80,6 @@ def apply_event(states: CurrentState, event: LedgerEvent) -> CurrentState:
         output_uris=_tuple_data(event, "output_uris") or state.output_uris,
     )
     return states
-
-
-def project_current(events: Iterable[LedgerEvent]) -> CurrentState:
-    """Replay events into the latest successful lifecycle state."""
-    states: CurrentState = {}
-    for event in events:
-        apply_event(states, event)
-    return states
-
-
-def load_current(path: Path) -> CurrentState:
-    """Replay the event store at ``path`` into a current-state projection."""
-    return AppState.replay(EventStore.open(path)).current
 
 
 def assets_at(current: CurrentState, event: str) -> list[CurrentAssetState]:

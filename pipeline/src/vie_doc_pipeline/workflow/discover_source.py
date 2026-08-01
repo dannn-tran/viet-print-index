@@ -1,7 +1,6 @@
 """Discover external source records and record source assets."""
 
 from itertools import islice
-from pathlib import Path
 from pathlib import PurePosixPath
 import urllib.parse
 
@@ -10,7 +9,6 @@ from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
-from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 
@@ -41,11 +39,9 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
 
 
 def discover_source_assets(
-    config: PipelineConfig, ledger_path: Path, limit: int | None = None
+    config: PipelineConfig, event_store: EventStore, limit: int | None = None
 ) -> list[SourceAsset]:
     """Discover external source records that are not already in the ledger."""
-    event_store = EventStore.open(ledger_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
     state = AppState.replay(event_store)
     with open_source_items(config) as source_items:
         known_asset_keys = set(state.current)

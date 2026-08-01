@@ -10,7 +10,7 @@ from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.paths import default_ledger_path
-from vie_doc_pipeline.ledger.projection import AppState, load_current
+from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import load_config
@@ -50,8 +50,9 @@ def status(
     """Summarise current workflow lifecycle and review states."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
-    current = load_current(ledger_path)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    current = AppState.replay(event_store).current
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
     print(f"Assets      : {len(current)}")
@@ -70,8 +71,9 @@ def source_discover(
     """Discover external source records into the JSONL ledger."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
-    assets = discover_source_assets(config, ledger_path, limit=limit)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    assets = discover_source_assets(config, event_store, limit=limit)
     print(f"Discovered  : {len(assets)}")
     print(f"Ledger      : {ledger_path}")
 
@@ -86,7 +88,9 @@ def source_fetch(
     """Fetch discovered original source assets into target storage."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    summary = fetch_source_assets(config, ledger_path, limit=limit)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    summary = fetch_source_assets(config, event_store, limit=limit)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
@@ -118,7 +122,7 @@ def images_normalize(
                 state.record(image_inverted(selection.image_key))
             case AllNormalizationCandidates():
                 raise typer.BadParameter("--inverted requires --source-id or --image-id")
-    summary = normalize_images(config, ledger_path, limit=limit, selection=selection)
+    summary = normalize_images(config, event_store, limit=limit, selection=selection)
     print(f"Images created: {summary.created}")
     print(f"Native images : {summary.native_registered} (registered without copying)")
     print(f"Failed        : {summary.failed}")
@@ -144,8 +148,9 @@ def images_review(
     """List normalized images that were retained unchanged for manual review."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    ensure_config_compatible(EventStore.open(ledger_path), config.config_snapshot)
-    current = load_current(ledger_path)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    current = AppState.replay(event_store).current
     flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")
@@ -181,7 +186,9 @@ def ocr_submit_jobs(
     """Submit OCR jobs for normalized image assets without waiting."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    summary = submit_ocr_jobs(config, ledger_path, limit=limit)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    summary = submit_ocr_jobs(config, event_store, limit=limit)
     print(f"Submitted   : {summary.submitted} images")
     print(f"Ledger      : {ledger_path}")
 
@@ -195,7 +202,9 @@ def ocr_check_status(
     """Report whether submitted OCR jobs have result files in GCS."""
     config = load_config(pub_id, config_dir)
     ledger_path = default_ledger_path(pub_id, state_dir)
-    summary = check_ocr_status(config, ledger_path)
+    event_store = EventStore.open(ledger_path)
+    ensure_config_compatible(event_store, config.config_snapshot)
+    summary = check_ocr_status(config, event_store)
     print(f"Completed   : {summary.completed} images")
     print(f"Pending     : {summary.pending} images")
     print(f"Ledger      : {ledger_path}")

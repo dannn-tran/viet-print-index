@@ -7,7 +7,7 @@ from pathlib import Path
 from vie_doc_pipeline.config import ConfigSnapshot
 from vie_doc_pipeline.ledger.events import failed, image_normalized, ocr_job_submitted, source_discovered, source_fetched
 from vie_doc_pipeline.ledger.configuration import ConfigMismatchError, ensure_config_compatible
-from vie_doc_pipeline.ledger.projection import eligible_source_assets, load_current
+from vie_doc_pipeline.ledger.projection import AppState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 
@@ -62,7 +62,7 @@ class EventStoreConfigTest(unittest.TestCase):
             lines = path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
-            self.assertEqual(load_current(path)[asset.key].job_id, "operation-1")
+            self.assertEqual(AppState.replay(store).current[asset.key].job_id, "operation-1")
             self.assertEqual(len(list(store.read_events())), 4)
 
     def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
@@ -74,7 +74,7 @@ class EventStoreConfigTest(unittest.TestCase):
             )))
             asset_key = "pub/issue/001"
             store.append(failed(asset_key, stage="fetch", error="temporary failure"))
-            current = load_current(path)[asset_key]
+            current = AppState.replay(store).current[asset_key]
             self.assertEqual(current.event, "source_discovered")
             self.assertIsNotNone(current.failure)
             self.assertEqual(current.failure.stage if current.failure else None, "fetch")
@@ -86,7 +86,7 @@ class EventStoreConfigTest(unittest.TestCase):
             store = EventStore.open(path)
             store.append(source_discovered(asset))
             store.append(failed(asset.key, stage="fetch", error="HTTP 404", retryable=False))
-            self.assertEqual(eligible_source_assets(load_current(path)), [])
+            self.assertEqual(eligible_source_assets(AppState.replay(store).current), [])
 
     def test_successful_retry_clears_prior_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -96,7 +96,7 @@ class EventStoreConfigTest(unittest.TestCase):
             store.append(source_discovered(asset))
             store.append(failed(asset.key, stage="fetch", error="timeout"))
             store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
-            self.assertIsNone(load_current(path)[asset.key].failure)
+            self.assertIsNone(AppState.replay(store).current[asset.key].failure)
 
     def test_rejects_unknown_event_shape_at_jsonl_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

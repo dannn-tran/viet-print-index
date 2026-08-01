@@ -5,30 +5,36 @@ from __future__ import annotations
 import fcntl
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
+
+if TYPE_CHECKING:
+    from vie_doc_pipeline.ledger.store import EventStore
 
 
 @contextmanager
-def source_fetch_lock(ledger_path: Path) -> Iterator[None]:
-    """Allow only one source-fetch command per publication ledger."""
-    path = ledger_path.with_suffix(ledger_path.suffix + ".source-fetch.lock")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise RuntimeError(f"Another source-fetch command is already running for {ledger_path.stem}") from error
-        try:
+def source_fetch_lock(event_store: "EventStore") -> Iterator[None]:
+    """Allow only one source-fetch command per event store."""
+    try:
+        with event_store.lock(".source-fetch.lock", non_blocking=True):
             yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except BlockingIOError as error:
+        raise RuntimeError("Another source-fetch command is already running") from error
 
 
 @contextmanager
 def ledger_write_lock(path: Path) -> Iterator[None]:
     """Hold the advisory lock used while appending one ledger event."""
+    with advisory_file_lock(path):
+        yield
+
+
+@contextmanager
+def advisory_file_lock(path: Path, *, non_blocking: bool = False) -> Iterator[None]:
+    """Hold an advisory exclusive lock for one file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        operation = fcntl.LOCK_EX | (fcntl.LOCK_NB if non_blocking else 0)
+        fcntl.flock(handle.fileno(), operation)
         try:
             yield
         finally:

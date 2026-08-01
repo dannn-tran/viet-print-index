@@ -7,7 +7,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from dataclasses import replace
 from itertools import islice
-from pathlib import Path
 from pathlib import PurePosixPath
 
 from google.api_core import exceptions as google_exceptions
@@ -15,7 +14,6 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, assets_at
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
@@ -71,13 +69,11 @@ class NormalizationContext:
 
 def normalize_images(
     config: PipelineConfig,
-    ledger_path: Path,
+    event_store: EventStore,
     limit: int | None = None,
     selection: NormalizationSelection = AllNormalizationCandidates(),
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
-    event_store = EventStore.open(ledger_path)
-    ensure_config_compatible(event_store, config.config_snapshot)
     with open_target_store(config.target) as store:
         state = AppState.replay(event_store)
         current = state.current

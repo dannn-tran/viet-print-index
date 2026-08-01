@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from vie_doc_pipeline.ledger.events import source_discovered, source_fetched
 from vie_doc_pipeline.ledger.store import EventStore
-from vie_doc_pipeline.ledger.projection import load_current
+from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import (
     GcsTarget,
@@ -50,20 +50,20 @@ class AssetDiscoveryTest(unittest.TestCase):
         asset = ImageAsset("cuu-quoc", "issue-001", "001", "https://example.test/001.jpg", "cuu-quoc/images/issue-001/001.jpg")
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
-            store = EventStore.open(ledger_path)
-            store.append(source_discovered(asset))
-            store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
+            event_store = EventStore.open(ledger_path)
+            event_store.append(source_discovered(asset))
+            event_store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
             store = _FakeTargetStore()
 
             with patch("vie_doc_pipeline.workflow.normalize_images.open_target_store", return_value=nullcontext(store)), \
                  patch("vie_doc_pipeline.workflow.normalize_images.check_inversion") as check:
                 check.return_value = Mock(inverted=False, needs_review=False)
-                summary = normalize_images(config, ledger_path)
+                summary = normalize_images(config, event_store)
 
             self.assertEqual(summary.created, 0)
             self.assertEqual(summary.native_registered, 1)
             self.assertEqual(store.uploads, [])
-            self.assertEqual(load_current(ledger_path)[asset.key].event, "image_normalized")
+            self.assertEqual(AppState.replay(event_store).current[asset.key].event, "image_normalized")
             self.assertFalse(store.closed)
 
     def test_native_image_path_prefers_human_issue_label(self) -> None:
@@ -90,13 +90,14 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
+            store = EventStore.open(ledger_path)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider([source_item])),
             ):
-                self.assertEqual(len(discover_source_assets(config, ledger_path)), 1)
-                self.assertEqual(discover_source_assets(config, ledger_path), [])
+                self.assertEqual(len(discover_source_assets(config, store)), 1)
+                self.assertEqual(discover_source_assets(config, store), [])
 
     def test_discovery_applies_limit_after_source_dispatch(self) -> None:
         config = PipelineConfig(
@@ -112,11 +113,12 @@ class AssetDiscoveryTest(unittest.TestCase):
         ]
         with TemporaryDirectory() as directory:
             ledger_path = Path(directory) / "state.jsonl"
+            store = EventStore.open(ledger_path)
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),
             ):
-                self.assertEqual(len(discover_source_assets(config, ledger_path, limit=1)), 1)
+                self.assertEqual(len(discover_source_assets(config, store, limit=1)), 1)
 
 
 class _FakeTargetStore:

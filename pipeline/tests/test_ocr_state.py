@@ -35,7 +35,7 @@ class OcrStateTest(unittest.TestCase):
             store.append(source_discovered(asset))
             store.append(ocr_job_submitted([asset.key], job_id="job-1", output_prefix="gs://bucket/pub/ocr/job-1")[0])
             with patch("vie_doc_pipeline.workflow.ocr.storage.Client", return_value=client):
-                summary = check_ocr_status(config, path)
+                summary = check_ocr_status(config, store)
 
         self.assertEqual((summary.completed, summary.pending), (0, 1))
         self.assertTrue(client.closed)

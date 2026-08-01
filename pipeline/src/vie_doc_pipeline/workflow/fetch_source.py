@@ -9,12 +9,10 @@ from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import islice
-from pathlib import Path
 
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_fetched
-from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
 from vie_doc_pipeline.ledger.locking import source_fetch_lock
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
@@ -91,11 +89,9 @@ class FetchContext:
         logger.warning("Failed to fetch %s: %s", asset.key, error)
 
 
-def fetch_source_assets(config: PipelineConfig, ledger_path: Path, limit: int | None = None) -> FetchSummary:
+def fetch_source_assets(config: PipelineConfig, event_store: EventStore, limit: int | None = None) -> FetchSummary:
     """Fetch discovered source assets into the configured target."""
-    with source_fetch_lock(ledger_path):
-        event_store = EventStore.open(ledger_path)
-        ensure_config_compatible(event_store, config.config_snapshot)
+    with source_fetch_lock(event_store):
         with open_target_store(config.target) as store:
             current = AppState.replay(event_store).current
             assets = iter_fetch_candidates(current, limit)
