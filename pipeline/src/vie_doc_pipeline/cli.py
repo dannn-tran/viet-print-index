@@ -9,7 +9,6 @@ import typer
 from vie_doc_pipeline.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.configuration import ensure_config_compatible
-from vie_doc_pipeline.ledger.paths import resolve_state_path
 from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
@@ -40,6 +39,13 @@ _Limit = Annotated[Optional[int], typer.Option(help="Process only first N items"
 _StatePath = Annotated[Optional[Path], typer.Option("--state-path", help="Event-store state path")]
 
 
+def _resolve_state_path(config_path: Path, state_path: Path | None) -> Path:
+    """Resolve the CLI's state-file override or its derived default."""
+    if state_path is not None:
+        return state_path
+    return Path(".pipeline-state") / "v2" / f"{config_path.stem}.jsonl"
+
+
 @app.command()
 def status(
     config_path: _ConfigPath,
@@ -47,7 +53,7 @@ def status(
 ) -> None:
     """Summarise current workflow lifecycle and review states."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     current = AppState.replay(event_store).current
@@ -67,7 +73,7 @@ def source_discover(
 ) -> None:
     """Discover external source records into the event store."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     assets = discover_source_assets(config, event_store, limit=limit)
@@ -83,7 +89,7 @@ def source_fetch(
 ) -> None:
     """Fetch discovered original source assets into target storage."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = fetch_source_assets(config, event_store, limit=limit)
@@ -104,7 +110,7 @@ def images_normalize(
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     state = AppState.replay(event_store)
@@ -141,7 +147,7 @@ def images_review(
 ) -> None:
     """List normalized images that were retained unchanged for manual review."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     current = AppState.replay(event_store).current
@@ -177,7 +183,7 @@ def ocr_submit_jobs(
 ) -> None:
     """Submit OCR jobs for normalized image assets without waiting."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = submit_ocr_jobs(config, event_store, limit=limit)
@@ -192,7 +198,7 @@ def ocr_check_status(
 ) -> None:
     """Report whether submitted OCR jobs have result files in GCS."""
     config = load_config(config_path)
-    state_path = resolve_state_path(config_path, state_path)
+    state_path = _resolve_state_path(config_path, state_path)
     event_store = EventStore.open(state_path)
     ensure_config_compatible(event_store, config.config_snapshot)
     summary = check_ocr_status(config, event_store)

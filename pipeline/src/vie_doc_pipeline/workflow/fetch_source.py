@@ -6,6 +6,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import islice
@@ -13,7 +14,7 @@ from itertools import islice
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import failed, source_fetched
-from vie_doc_pipeline.ledger.locking import source_fetch_lock
+from vie_doc_pipeline.ledger.locking import LockUnavailableError
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.config import PipelineConfig
@@ -91,7 +92,7 @@ class FetchContext:
 
 def fetch_source_assets(config: PipelineConfig, event_store: EventStore, limit: int | None = None) -> FetchSummary:
     """Fetch discovered source assets into the configured target."""
-    with source_fetch_lock(event_store):
+    with _source_fetch_lock(event_store):
         with open_target_store(config.target) as store:
             current = AppState.replay(event_store).current
             assets = iter_fetch_candidates(current, limit)
@@ -116,6 +117,16 @@ def iter_fetch_candidates(
     """Yield source assets eligible for another fetch attempt."""
     assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
     yield from islice(assets, limit)
+
+
+@contextmanager
+def _source_fetch_lock(event_store: EventStore) -> Iterator[None]:
+    """Serialize source-fetch commands for one event store."""
+    try:
+        with event_store.lock(".source-fetch.lock", non_blocking=True):
+            yield
+    except LockUnavailableError as error:
+        raise RuntimeError("Another source-fetch command is already running") from error
 
 
 def run_fetches(

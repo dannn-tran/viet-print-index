@@ -8,13 +8,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from vie_doc_pipeline.ledger.events import EventRecord
-from vie_doc_pipeline.ledger.locking import event_store_write_lock
+from vie_doc_pipeline.ledger.locking import _advisory_file_lock
 
 
 def _append_event(path: Path, event: EventRecord) -> None:
     """Append one event while holding a process-wide advisory file lock."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with event_store_write_lock(path.with_suffix(path.suffix + ".lock")):
+    with _advisory_file_lock(path.with_suffix(path.suffix + ".lock")):
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n")
             handle.flush()

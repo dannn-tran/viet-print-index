@@ -12,7 +12,7 @@ from pathlib import Path
 
 from vie_doc_pipeline.ledger.events import EventRecord
 from vie_doc_pipeline.ledger.jsonl import _append_event, _read_events
-from vie_doc_pipeline.ledger.locking import advisory_file_lock
+from vie_doc_pipeline.ledger.locking import _advisory_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class EventStore:
         """Discard an incomplete final record left by an interrupted append."""
         if not self._path.exists():
             return False
-        with advisory_file_lock(self._path.with_suffix(self._path.suffix + ".lock")):
+        with _advisory_file_lock(self._path.with_suffix(self._path.suffix + ".lock")):
             with self._path.open("rb+") as handle:
                 content = handle.read()
                 if not content or content.endswith(b"\n"):
@@ -60,7 +60,7 @@ class EventStore:
     @contextmanager
     def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
         """Hold a named exclusive lock owned by this event store."""
-        with advisory_file_lock(
+        with _advisory_file_lock(
             self._path.with_suffix(self._path.suffix + suffix),
             non_blocking=non_blocking,
         ):
