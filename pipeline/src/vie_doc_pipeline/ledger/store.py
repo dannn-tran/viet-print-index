@@ -25,7 +25,9 @@ class EventStore:
     @classmethod
     def open(cls, path: Path) -> "EventStore":
         """Bind an event store to one append-only event file."""
-        return cls(path)
+        store = cls(path)
+        store._repair_trailing_record()
+        return store
 
     def iter_events(self) -> Iterator[EventRecord]:
         """Stream events in their persisted order."""
@@ -54,18 +56,31 @@ class EventStore:
                 handle.flush()
                 os.fsync(handle.fileno())
 
-    def repair_trailing_record(self) -> bool:
+    def _repair_trailing_record(self) -> bool:
         """Discard an incomplete final record left by an interrupted append."""
         if not self._path.exists():
             return False
         with _advisory_file_lock(self._path.with_suffix(self._path.suffix + ".lock")):
             with self._path.open("rb+") as handle:
-                content = handle.read()
-                if not content or content.endswith(b"\n"):
+                handle.seek(0, os.SEEK_END)
+                end = handle.tell()
+                if not end:
                     return False
-                start = content.rfind(b"\n") + 1
+                handle.seek(-1, os.SEEK_END)
+                if handle.read(1) == b"\n":
+                    return False
+
+                start = end - 1
+                while start > 0:
+                    start -= 1
+                    handle.seek(start)
+                    if handle.read(1) == b"\n":
+                        start += 1
+                        break
+                handle.seek(start)
+                tail = handle.read()
                 try:
-                    event = json.loads(content[start:].decode("utf-8"))
+                    event = json.loads(tail.decode("utf-8"))
                     EventRecord.from_dict(event)
                 except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                     handle.truncate(start)

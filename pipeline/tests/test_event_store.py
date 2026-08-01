@@ -44,7 +44,7 @@ class EventStoreTest(unittest.TestCase):
             with path.open("ab") as handle:
                 handle.write(b'{"event":"source_discovered"')
 
-            state = AppState.replay(store)
+            state = AppState.replay(EventStore.open(path))
 
             self.assertTrue(state.current[asset.key].asset)
             self.assertEqual(len(list(store.iter_events())), 1)

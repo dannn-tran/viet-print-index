@@ -15,7 +15,6 @@ def bind_configuration(event_store: EventStore, config_toml: str | None) -> None
     if config_toml is None:
         return
 
-    event_store.repair_trailing_record()
     first = event_store.first_event()
     if first is None:
         event_store.append(configuration_bound(config_toml))
