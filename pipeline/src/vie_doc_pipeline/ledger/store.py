@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vie_doc_pipeline.ledger.events import EventRecord
-from vie_doc_pipeline.ledger.jsonl import _append_event, _read_events
 from vie_doc_pipeline.ledger.locking import _advisory_file_lock
 
 logger = logging.getLogger(__name__)
@@ -30,11 +29,26 @@ class EventStore:
 
     def read_events(self) -> Iterator[EventRecord]:
         """Stream events in their persisted order."""
-        yield from _read_events(self._path)
+        if not self._path.exists():
+            return
+        with self._path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    event = EventRecord.from_dict(json.loads(line))
+                except (ValueError, json.JSONDecodeError) as error:
+                    raise ValueError(f"Invalid event record at {self._path}:{line_number}") from error
+                yield event
 
     def append(self, event: EventRecord) -> None:
         """Append one event atomically with the store's file lock."""
-        _append_event(self._path, event)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with _advisory_file_lock(self._path.with_suffix(self._path.suffix + ".lock")):
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
 
     def repair_trailing_record(self) -> bool:
         """Discard an incomplete final record left by an interrupted append."""
