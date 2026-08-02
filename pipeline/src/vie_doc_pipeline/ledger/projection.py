@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 import time
@@ -50,7 +52,7 @@ class ConfigurationMismatchError(ValueError):
 class AppState:
     """Current projection coupled to the event store that records it."""
 
-    event_store: EventStore
+    _event_store: EventStore
     current: CurrentState
     source_inversion_overrides: frozenset[str] = frozenset()
 
@@ -84,7 +86,7 @@ class AppState:
         if config_toml is None:
             return
 
-        first = self.event_store.first_event()
+        first = self._event_store.first_event()
         if first is None:
             self.record(configuration_bound(config_toml))
             return
@@ -102,8 +104,14 @@ class AppState:
 
     def record(self, event: EventRecord) -> None:
         """Append an event, then apply it to the live projection."""
-        self.event_store.append(event)
+        self._event_store.append(event)
         self._apply(event)
+
+    @contextmanager
+    def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
+        """Hold a named lock owned by this application state."""
+        with self._event_store.lock(suffix, non_blocking=non_blocking):
+            yield
 
     def _apply(self, event: EventRecord) -> None:
         self.current = apply_event(self.current, event)

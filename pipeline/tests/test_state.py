@@ -24,7 +24,7 @@ class AppStateTest(unittest.TestCase):
             state = AppState.open(path, "config-a")
             state.bind_configuration("config-a")
 
-            events = list(state.event_store.iter_events())
+            events = list(EventStore.open(path).iter_events())
             self.assertEqual(events[0].event, "configuration_bound")
             self.assertEqual(events[0].data["config_toml"], "config-a")
             self.assertEqual(len(events), 1)

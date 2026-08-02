@@ -4,6 +4,7 @@ from google.api_core import exceptions as google_exceptions
 import typer
 from vie_doc_pipeline.cli import normalization_selection
 from vie_doc_pipeline.assets import PdfAsset
+from vie_doc_pipeline.ledger.events import failed, source_fetched
 from vie_doc_pipeline.sources.http import SourceHttpError, TransientSourceError
 from vie_doc_pipeline.workflow.fetch_source import AlreadyPresent, Fetched, FetchFailed, _failure_details, summarize_fetches
 from vie_doc_pipeline.workflow.normalize_images import summarize_normalization
@@ -14,7 +15,11 @@ class WorkflowResultTest(unittest.TestCase):
     def test_fetch_summary_includes_all_outcome_kinds(self) -> None:
         asset = PdfAsset("pub", "issue", "https://example.test/issue.pdf", "pub/pdf/issue.pdf")
 
-        summary = summarize_fetches([Fetched(asset), AlreadyPresent(asset), FetchFailed(asset)])
+        summary = summarize_fetches([
+            Fetched(asset, source_fetched(asset, checksum="", size_bytes=0)),
+            AlreadyPresent(asset, source_fetched(asset, checksum="", size_bytes=0)),
+            FetchFailed(asset, failed(asset.key, stage="fetch", error="failed")),
+        ])
 
         self.assertEqual((summary.fetched, summary.already_present, summary.failed), (1, 1, 1))
 

@@ -13,10 +13,9 @@ from itertools import islice
 
 from google.api_core import exceptions as google_exceptions
 
-from vie_doc_pipeline.ledger.events import failed, source_fetched
+from vie_doc_pipeline.ledger.events import EventRecord, failed, source_fetched
 from vie_doc_pipeline.ledger.locking import LockUnavailableError
 from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
-from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
@@ -35,16 +34,19 @@ class FetchSummary:
 @dataclass(frozen=True)
 class Fetched:
     asset: SourceAsset
+    event: EventRecord
 
 
 @dataclass(frozen=True)
 class AlreadyPresent:
     asset: SourceAsset
+    event: EventRecord
 
 
 @dataclass(frozen=True)
 class FetchFailed:
     asset: SourceAsset
+    event: EventRecord
 
 
 FetchOutcome = Fetched | AlreadyPresent | FetchFailed
@@ -56,28 +58,31 @@ class FetchContext:
 
     store: TargetStore
     http: HttpClient
-    event_store: EventStore
     retry_delay: float
 
     def fetch(self, asset: SourceAsset) -> FetchOutcome:
-        """Store one asset and persist its outcome in this stage session."""
+        """Fetch one asset and return the event that records its outcome."""
         try:
             existing = self.store.inspect(asset.target_path)
             if existing is not None:
-                self.event_store.append(source_fetched(asset, checksum=existing.checksum, size_bytes=existing.size_bytes))
-                return AlreadyPresent(asset)
+                return AlreadyPresent(
+                    asset,
+                    source_fetched(asset, checksum=existing.checksum, size_bytes=existing.size_bytes),
+                )
             data = self.http.fetch_bytes(asset.source_url)
             self.store.write_bytes(asset.target_path, data, content_type=_content_type(asset))
-            self.event_store.append(source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)))
-            return Fetched(asset)
+            return Fetched(
+                asset,
+                source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)),
+            )
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
-            self.record_failure(asset, error)
-            return FetchFailed(asset)
+            return self.record_failure(asset, error)
 
-    def record_failure(self, asset: SourceAsset, error: Exception) -> None:
-        """Persist retry metadata for one failed source fetch."""
+    def record_failure(self, asset: SourceAsset, error: Exception) -> FetchFailed:
+        """Build retry metadata for one failed source fetch."""
         retryable, attempts = _failure_details(error)
-        self.event_store.append(
+        result = FetchFailed(
+            asset,
             failed(
                 asset.key,
                 stage="fetch",
@@ -88,11 +93,12 @@ class FetchContext:
             ),
         )
         logger.warning("Failed to fetch %s: %s", asset.key, error)
+        return result
 
 
 def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | None = None) -> FetchSummary:
     """Fetch discovered source assets into the configured target."""
-    with _source_fetch_lock(state.event_store):
+    with _source_fetch_lock(state):
         with open_target_store(config.target) as store:
             current = state.current
             assets = iter_fetch_candidates(current, limit)
@@ -101,11 +107,14 @@ def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | No
                 context = FetchContext(
                     store=store,
                     http=client,
-                    event_store=state.event_store,
                     retry_delay=config.source_requests.backoff_max_seconds,
                 )
                 outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
-                return summarize_fetches(outcomes)
+                recorded: list[FetchOutcome] = []
+                for outcome in outcomes:
+                    state.record(outcome.event)
+                    recorded.append(outcome)
+                return summarize_fetches(recorded)
             finally:
                 client.close()
 
@@ -120,10 +129,10 @@ def iter_fetch_candidates(
 
 
 @contextmanager
-def _source_fetch_lock(event_store: EventStore) -> Iterator[None]:
+def _source_fetch_lock(state: AppState) -> Iterator[None]:
     """Serialize source-fetch commands for one event store."""
     try:
-        with event_store.lock(".source-fetch.lock", non_blocking=True):
+        with state.lock(".source-fetch.lock", non_blocking=True):
             yield
     except LockUnavailableError as error:
         raise RuntimeError("Another source-fetch command is already running") from error
