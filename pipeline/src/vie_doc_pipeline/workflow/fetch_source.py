@@ -6,7 +6,6 @@ import hashlib
 import logging
 import time
 from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import islice
@@ -14,7 +13,6 @@ from itertools import islice
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import EventRecord, failed, source_fetched
-from vie_doc_pipeline.ledger.locking import LockUnavailableError
 from vie_doc_pipeline.ledger.projection import PipelineState
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
@@ -52,14 +50,14 @@ FetchOutcome = Fetched | AlreadyPresent | FetchFailed
 
 
 @dataclass(frozen=True)
-class FetchContext:
+class _FetchContext:
     """External capabilities and policy fixed for one source-fetch run."""
 
     store: TargetStore
     http: HttpClient
     retry_delay: float
 
-    def fetch(self, asset: SourceAsset) -> FetchOutcome:
+    def _fetch(self, asset: SourceAsset) -> FetchOutcome:
         """Fetch one asset and return the event that records its outcome."""
         try:
             existing = self.store.inspect(asset.target_path)
@@ -75,9 +73,9 @@ class FetchContext:
                 source_fetched(asset, checksum=hashlib.sha256(data).hexdigest(), size_bytes=len(data)),
             )
         except (SourceHttpError, TransientSourceError, google_exceptions.GoogleAPIError, OSError) as error:
-            return self.record_failure(asset, error)
+            return self._record_failure(asset, error)
 
-    def record_failure(self, asset: SourceAsset, error: Exception) -> FetchFailed:
+    def _record_failure(self, asset: SourceAsset, error: Exception) -> FetchFailed:
         """Build retry metadata for one failed source fetch."""
         retryable, attempts = _failure_details(error)
         result = FetchFailed(
@@ -104,46 +102,36 @@ class SourceAssetFetchService:
     def execute(self, limit: int | None = None) -> FetchSummary:
         """Fetch discovered source assets into the configured target."""
         config = self.state.configuration
-        with _source_fetch_lock(self.state):
-            with open_target_store(config.target) as store:
-                assets = islice(self.state.eligible_source_assets(), limit)
-                client = http_client(config.source_requests)
-                try:
-                    context = FetchContext(
-                        store=store,
-                        http=client,
-                        retry_delay=config.source_requests.backoff_max_seconds,
-                    )
-                    outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
-                    recorded: list[FetchOutcome] = []
-                    for outcome in outcomes:
-                        self.state.record(outcome.event)
-                        recorded.append(outcome)
-                    return summarize_fetches(recorded)
-                finally:
-                    client.close()
-
-@contextmanager
-def _source_fetch_lock(state: PipelineState) -> Iterator[None]:
-    """Serialize source-fetch commands for one event store."""
-    try:
-        with state.lock(".source-fetch.lock", non_blocking=True):
-            yield
-    except LockUnavailableError as error:
-        raise RuntimeError("Another source-fetch command is already running") from error
+        with open_target_store(config.target) as store:
+            assets = islice(self.state.eligible_source_assets(), limit)
+            client = http_client(config.source_requests)
+            try:
+                context = _FetchContext(
+                    store=store,
+                    http=client,
+                    retry_delay=config.source_requests.backoff_max_seconds,
+                )
+                outcomes = _run_fetches(context, assets, config.source_requests.max_concurrent_requests)
+                recorded: list[FetchOutcome] = []
+                for outcome in outcomes:
+                    self.state.record(outcome.event)
+                    recorded.append(outcome)
+                return _summarize_fetches(recorded)
+            finally:
+                client.close()
 
 
-def run_fetches(
-    context: FetchContext,
+def _run_fetches(
+    context: _FetchContext,
     assets: Iterable[SourceAsset],
     max_concurrent_requests: int,
 ) -> Iterator[FetchOutcome]:
     """Apply one fetch function concurrently while retaining input ordering."""
     with ThreadPoolExecutor(max_workers=max_concurrent_requests) as executor:
-        yield from executor.map(context.fetch, assets)
+        yield from executor.map(context._fetch, assets)
 
 
-def summarize_fetches(outcomes: Iterable[FetchOutcome]) -> FetchSummary:
+def _summarize_fetches(outcomes: Iterable[FetchOutcome]) -> FetchSummary:
     """Reduce individual source-fetch outcomes into a typed stage summary."""
     fetched = 0
     already_present = 0

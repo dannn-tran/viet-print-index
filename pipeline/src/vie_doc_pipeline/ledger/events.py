@@ -48,7 +48,7 @@ _EVENT_NAMES = {
 }
 
 
-def utc_now() -> str:
+def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
@@ -115,4 +115,4 @@ EventName = Literal[
 
 
 def _event(event: EventName, asset_key: str, data: dict[str, object]) -> EventRecord:
-    return EventRecord(event=event, asset_key=asset_key, at=utc_now(), data=data)
+    return EventRecord(event=event, asset_key=asset_key, at=_utc_now(), data=data)

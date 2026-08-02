@@ -115,6 +115,11 @@ vie-pipeline ocr check-status <config-path> # report completed/pending OCR outpu
   replays it into typed in-memory pipeline state for workflow decisions.
 - Each command replays its event store once and passes the resulting pipeline
   state through the workflow; stages update that state through `state.record()`.
+- A command owns one pipeline state path during execution. Its worker threads
+  receive distinct assets and return events; only the orchestrator records those
+  events. The event-store lock protects atomic appends, not task claiming across
+  independently launched commands, so concurrent runs must partition their
+  inputs or use separate state paths.
 - The first event records the exact TOML configuration. A different
   configuration cannot silently mix state, and historical settings remain
   reconstructible even if the source TOML later changes.

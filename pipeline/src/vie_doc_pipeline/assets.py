@@ -83,7 +83,7 @@ class ImageAsset:
 SourceAsset = PdfAsset | ImageAsset
 
 
-def source_asset_from_dict(raw: dict[str, object]) -> SourceAsset:
+def _source_asset_from_dict(raw: dict[str, object]) -> SourceAsset:
     """Decode one JSONL asset payload at the persistence boundary."""
     kind = raw.get("kind")
     if kind == "pdf":

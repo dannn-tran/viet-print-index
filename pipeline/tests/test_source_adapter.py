@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from vie_doc_pipeline.config import GcsTarget, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.images.pdf import ExplodeParams
-from vie_doc_pipeline.sources.http import encode_url
+from vie_doc_pipeline.sources.http import _encode_url
 from vie_doc_pipeline.sources.factory import open_source_items
 
 
@@ -14,13 +14,13 @@ class SourceAdapterTest(unittest.TestCase):
         url = "https://example.test/tư-liệu/Đời mới.pdf?q=văn nghệ&n=1"
 
         self.assertEqual(
-            encode_url(url),
+            _encode_url(url),
             "https://example.test/t%C6%B0-li%E1%BB%87u/%C4%90%E1%BB%9Di%20m%E1%BB%9Bi.pdf?q=v%C4%83n%20ngh%E1%BB%87&n=1",
         )
 
     def test_preserves_existing_percent_escapes(self) -> None:
         self.assertEqual(
-            encode_url("https://example.test/Ngay%20Nay.pdf?q=%C4%91ời"),
+            _encode_url("https://example.test/Ngay%20Nay.pdf?q=%C4%91ời"),
             "https://example.test/Ngay%20Nay.pdf?q=%C4%91%E1%BB%9Di",
         )
 

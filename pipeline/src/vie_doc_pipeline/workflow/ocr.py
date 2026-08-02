@@ -64,12 +64,12 @@ class OcrStatusService:
     def execute(self) -> OcrStatusSummary:
         """Check for OCR results in GCS and return completed and pending image counts."""
         _require_gcs_target(self.state.configuration.target)
-        with open_ocr_status_session(self.state) as session:
+        with _open_ocr_status_session(self.state) as session:
             return session.check()
 
 
 @dataclass
-class OcrStatusSession:
+class _OcrStatusSession:
     state: PipelineState
     client: storage.Client
 
@@ -80,7 +80,7 @@ class OcrStatusSession:
                 by_job.setdefault((state.job_id, state.output_prefix), []).append(state.asset.key)
         completed = pending = 0
         for (_, output_prefix), asset_keys in by_job.items():
-            output_uris = self.output_uris(output_prefix)
+            output_uris = self._output_uris(output_prefix)
             if output_uris:
                 for event in ocr_output_available(asset_keys, output_uris=output_uris):
                     self.state.record(event)
@@ -89,17 +89,17 @@ class OcrStatusSession:
                 pending += len(asset_keys)
         return OcrStatusSummary(completed, pending)
 
-    def output_uris(self, output_prefix: str) -> list[str]:
+    def _output_uris(self, output_prefix: str) -> list[str]:
         bucket_name, object_prefix = _parse_gs_uri(output_prefix)
         return [f"gs://{bucket_name}/{blob.name}" for blob in self.client.list_blobs(bucket_name, prefix=object_prefix)]
 
 
 @contextmanager
-def open_ocr_status_session(state: PipelineState):
+def _open_ocr_status_session(state: PipelineState):
     target = _require_gcs_target(state.configuration.target)
     client = storage.Client(project=target.project)
     try:
-        yield OcrStatusSession(state, client)
+        yield _OcrStatusSession(state, client)
     finally:
         client.close()
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 import time
@@ -11,7 +9,7 @@ import time
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.ledger.events import EventRecord, configuration_bound
 from vie_doc_pipeline.ledger.store import EventStore
-from vie_doc_pipeline.assets import SourceAsset, source_asset_from_dict
+from vie_doc_pipeline.assets import SourceAsset, _source_asset_from_dict
 
 
 @dataclass(frozen=True)
@@ -155,12 +153,6 @@ class PipelineState:
         self._event_store.append(event)
         self._apply(event)
 
-    @contextmanager
-    def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
-        """Hold a named lock owned by this pipeline state."""
-        with self._event_store.lock(suffix, non_blocking=non_blocking):
-            yield
-
     def _apply(self, event: EventRecord) -> None:
         if event.event == "configuration_bound":
             return
@@ -191,7 +183,7 @@ def _asset_state_after_event(state: AssetState, event: EventRecord) -> AssetStat
 
 def _event_asset(event: EventRecord) -> SourceAsset | None:
     asset = event.data.get("asset")
-    return source_asset_from_dict(asset) if isinstance(asset, dict) else None
+    return _source_asset_from_dict(asset) if isinstance(asset, dict) else None
 
 
 def _failure_from_event(event: EventRecord) -> FailureState:

@@ -115,26 +115,26 @@ def load_config(config_path: str | Path) -> PipelineConfig:
     raw = tomllib.loads(raw_toml)
 
     config = PipelineConfig(
-        publication=parse_publication(_required_table(raw, "publication")),
-        target=parse_target(_required_table(raw, "target")),
-        source=parse_source(_optional_table(raw, "source")),
-        explode=parse_explode(_optional_table(raw, "explode")),
-        ocr=parse_ocr(_optional_table(raw, "ocr")),
-        source_requests=parse_source_requests(_optional_table(raw, "source_requests")),
+        publication=_parse_publication(_required_table(raw, "publication")),
+        target=_parse_target(_required_table(raw, "target")),
+        source=_parse_source(_optional_table(raw, "source")),
+        explode=_parse_explode(_optional_table(raw, "explode")),
+        ocr=_parse_ocr(_optional_table(raw, "ocr")),
+        source_requests=_parse_source_requests(_optional_table(raw, "source_requests")),
         config_toml=raw_toml,
     )
     _validate_config(config)
     return config
 
 
-def parse_publication(raw: Mapping[str, object]) -> PublicationConfig:
+def _parse_publication(raw: Mapping[str, object]) -> PublicationConfig:
     return PublicationConfig(
         id=_required_string(raw, "id", "publication"),
         name=_required_string(raw, "name", "publication"),
     )
 
 
-def parse_target(raw: Mapping[str, object]) -> TargetStorage:
+def _parse_target(raw: Mapping[str, object]) -> TargetStorage:
     """Decode the configured durable target into one storage variant."""
     target_type = _optional_string(raw.get("type"), "target.type")
     match target_type:
@@ -159,7 +159,7 @@ def parse_target(raw: Mapping[str, object]) -> TargetStorage:
             raise ValueError(f"Unknown target.type: {target_type!r}; expected 'gcs' or 'local'")
 
 
-def parse_source(raw: Mapping[str, object]) -> SourceConfig:
+def _parse_source(raw: Mapping[str, object]) -> SourceConfig:
     """Decode a TOML source table into one valid, typed source variant."""
     source_type = _optional_string(raw.get("type"), "source.type") or "local_dir"
     match source_type:
@@ -188,7 +188,7 @@ def parse_source(raw: Mapping[str, object]) -> SourceConfig:
             raise ValueError(f"Unknown source.type: {source_type!r}")
 
 
-def parse_explode(raw: Mapping[str, object]) -> ExplodeParams:
+def _parse_explode(raw: Mapping[str, object]) -> ExplodeParams:
     return ExplodeParams(
         negate_png=_parse_bool(raw.get("negate_png", False), "explode.negate_png"),
         preserve_crop=_parse_bool(raw.get("preserve_crop", False), "explode.preserve_crop"),
@@ -199,11 +199,11 @@ def parse_explode(raw: Mapping[str, object]) -> ExplodeParams:
     )
 
 
-def parse_ocr(raw: Mapping[str, object]) -> OcrConfig:
+def _parse_ocr(raw: Mapping[str, object]) -> OcrConfig:
     return OcrConfig(language_hints=_parse_strings(raw.get("language_hints", ()), "ocr.language_hints"))
 
 
-def parse_source_requests(raw: Mapping[str, object]) -> SourceRequestsConfig:
+def _parse_source_requests(raw: Mapping[str, object]) -> SourceRequestsConfig:
     return SourceRequestsConfig(
         max_concurrent_requests=_parse_int(
             raw.get("max_concurrent_requests", 4), "source_requests.max_concurrent_requests"

@@ -51,7 +51,7 @@ NormalizationSelection = (
 
 
 @dataclass(frozen=True)
-class NormalizationContext:
+class _NormalizationContext:
     """External capabilities and fixed inputs for one normalisation-stage run."""
 
     state: PipelineState
@@ -74,13 +74,13 @@ class ImageNormalizationService:
         config = self.state.configuration
         with open_target_store(config.target) as store:
             overrides = self.state.inversion_overrides
-            assets = iter_normalization_candidates(self.state, selection, limit)
-            context = NormalizationContext(self.state, store, overrides)
-            results = (normalize_asset(context, asset) for asset in assets)
-            return summarize_normalization(results)
+            assets = _iter_normalization_candidates(self.state, selection, limit)
+            context = _NormalizationContext(self.state, store, overrides)
+            results = (_normalize_asset(context, asset) for asset in assets)
+            return _summarize_normalization(results)
 
 
-def iter_normalization_candidates(
+def _iter_normalization_candidates(
     state: PipelineState,
     selection: NormalizationSelection,
     limit: int | None,
@@ -96,30 +96,30 @@ def iter_normalization_candidates(
     yield from islice(candidates, limit)
 
 
-def normalize_asset(
-    context: NormalizationContext,
+def _normalize_asset(
+    context: _NormalizationContext,
     asset: SourceAsset,
 ) -> NormalizationSummary:
     """Normalise one source asset and persist either its images or failure."""
     try:
         match asset:
             case ImageAsset():
-                return NormalizationSummary(native_registered=normalize_native_image(context, asset))
+                return NormalizationSummary(native_registered=_normalize_native_image(context, asset))
             case PdfAsset():
-                return NormalizationSummary(created=normalize_pdf_asset(context, asset))
+                return NormalizationSummary(created=_normalize_pdf_asset(context, asset))
     except (google_exceptions.GoogleAPIError, OSError, ValueError, fitz.FitzError) as error:
         context.state.record(failed(asset.key, stage="normalize", error=str(error)))
         logger.warning("Failed to normalize %s: %s", asset.key, error)
     return NormalizationSummary(failed=1)
 
 
-def normalize_native_image(
-    context: NormalizationContext,
+def _normalize_native_image(
+    context: _NormalizationContext,
     asset: ImageAsset,
 ) -> int:
     """Designate a native image, writing a new object only when it is inverted."""
     raw_bytes = context.store.read_bytes(asset.target_path)
-    image = _normalize_bytes(asset, raw_bytes, asset.target_path, is_forced_inverted(asset, context.overrides))
+    image = _normalize_bytes(asset, raw_bytes, asset.target_path, _is_forced_inverted(asset, context.overrides))
     if image.target_path != asset.target_path:
         context.store.write_bytes(
             image.target_path,
@@ -130,22 +130,22 @@ def normalize_native_image(
     return 1
 
 
-def normalize_pdf_asset(
-    context: NormalizationContext,
+def _normalize_pdf_asset(
+    context: _NormalizationContext,
     asset: PdfAsset,
 ) -> int:
     """Render one PDF and store its presentation/OCR image assets."""
     pdf_bytes = context.store.read_bytes(asset.target_path)
     created = 0
-    for image, image_bytes in iter_pdf_image_assets(context.state.configuration, asset, pdf_bytes, context.overrides):
-        store_pdf_image(context.store, image, image_bytes)
+    for image, image_bytes in _iter_pdf_image_assets(context.state.configuration, asset, pdf_bytes, context.overrides):
+        _store_pdf_image(context.store, image, image_bytes)
         context.state.record(image_normalized(image))
         created += 1
     context.state.record(image_normalized(asset))
     return created
 
 
-def iter_pdf_image_assets(
+def _iter_pdf_image_assets(
     config: PipelineConfig,
     asset: PdfAsset,
     pdf_bytes: bytes,
@@ -153,11 +153,11 @@ def iter_pdf_image_assets(
 ) -> Iterator[tuple[ImageAsset, bytes]]:
     """Yield normalised image records and bytes rendered from one PDF."""
     for filename, image_bytes in explode_pdf_bytes(pdf_bytes, config.explode):
-        image = pdf_image_asset(config, asset, filename)
-        yield _normalize_bytes(image, image_bytes, filename, is_forced_inverted(image, overrides)), image_bytes
+        image = _pdf_image_asset(config, asset, filename)
+        yield _normalize_bytes(image, image_bytes, filename, _is_forced_inverted(image, overrides)), image_bytes
 
 
-def pdf_image_asset(config: PipelineConfig, asset: PdfAsset, filename: str) -> ImageAsset:
+def _pdf_image_asset(config: PipelineConfig, asset: PdfAsset, filename: str) -> ImageAsset:
     """Build the canonical image-asset record for one rendered PDF image."""
     return ImageAsset(
         publication_id=asset.publication_id,
@@ -169,7 +169,7 @@ def pdf_image_asset(config: PipelineConfig, asset: PdfAsset, filename: str) -> I
     )
 
 
-def store_pdf_image(store: TargetStore, image: ImageAsset, image_bytes: bytes) -> None:
+def _store_pdf_image(store: TargetStore, image: ImageAsset, image_bytes: bytes) -> None:
     """Upload a rendered image exactly once, applying inversion when required."""
     if store.inspect(image.target_path) is not None:
         return
@@ -177,7 +177,7 @@ def store_pdf_image(store: TargetStore, image: ImageAsset, image_bytes: bytes) -
     store.write_bytes(image.target_path, output, content_type=_image_content_type(image.target_path))
 
 
-def summarize_normalization(results: Iterator[NormalizationSummary]) -> NormalizationSummary:
+def _summarize_normalization(results: Iterator[NormalizationSummary]) -> NormalizationSummary:
     """Reduce individual normalisation outcomes into a typed stage summary."""
     created = 0
     native_registered = 0
@@ -197,7 +197,7 @@ def _source_id(asset: SourceAsset) -> str:
     return asset.document_id if isinstance(asset, PdfAsset) else asset.issue_id
 
 
-def is_forced_inverted(asset: ImageAsset, overrides: InversionOverrides) -> bool:
+def _is_forced_inverted(asset: ImageAsset, overrides: InversionOverrides) -> bool:
     """Return whether review explicitly requested inversion for this image."""
     return asset.key in overrides.image_keys or _source_id(asset) in overrides.source_ids
 

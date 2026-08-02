@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextlib import contextmanager
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,12 +88,3 @@ class EventStore:
                     logger.warning("Removed incomplete final event record from %s", self._path)
                     return True
                 return False
-
-    @contextmanager
-    def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
-        """Hold a named exclusive lock owned by this event store."""
-        with _advisory_file_lock(
-            self._path.with_suffix(self._path.suffix + suffix),
-            non_blocking=non_blocking,
-        ):
-            yield

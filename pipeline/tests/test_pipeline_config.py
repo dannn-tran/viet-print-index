@@ -2,12 +2,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from vie_doc_pipeline.config import LocalTarget, SourceRequestsConfig, UrlSequencePdfSource, parse_explode, parse_ocr, parse_source, parse_source_requests, parse_target, load_config
+from vie_doc_pipeline.config import LocalTarget, SourceRequestsConfig, UrlSequencePdfSource, _parse_explode, _parse_ocr, _parse_source, _parse_source_requests, _parse_target, load_config
 
 
 class PipelineConfigTest(unittest.TestCase):
     def test_parse_source_constructs_a_typed_sequence_source(self) -> None:
-        source = parse_source({
+        source = _parse_source({
             "type": "url_sequence",
             "range": [1, 2],
             "urls": ["extra.pdf"],
@@ -26,13 +26,13 @@ class PipelineConfigTest(unittest.TestCase):
 
     def test_parse_target_supports_local_root(self) -> None:
         self.assertEqual(
-            parse_target({"type": "local", "root": "out/preview", "images_prefix": "pages"}),
+            _parse_target({"type": "local", "root": "out/preview", "images_prefix": "pages"}),
             LocalTarget(root="out/preview", images_prefix="pages"),
         )
 
     def test_parse_source_requests_uses_explicit_request_names(self) -> None:
         self.assertEqual(
-            parse_source_requests({"max_concurrent_requests": 2, "min_interval_seconds": 1.0}),
+            _parse_source_requests({"max_concurrent_requests": 2, "min_interval_seconds": 1.0}),
             SourceRequestsConfig(max_concurrent_requests=2, min_interval_seconds=1.0),
         )
 
@@ -45,7 +45,7 @@ class PipelineConfigTest(unittest.TestCase):
 
     def test_rejects_invalid_source_date(self) -> None:
         with self.assertRaisesRegex(ValueError, "source.from_date"):
-            parse_source({
+            _parse_source({
                 "type": "veridian",
                 "catalogue_url": "https://example.test/catalogue",
                 "image_server_url": "https://example.test/images",
@@ -56,11 +56,11 @@ class PipelineConfigTest(unittest.TestCase):
 
     def test_rejects_coercible_but_invalid_config_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "explode.negate_png"):
-            parse_explode({"negate_png": "false"})
+            _parse_explode({"negate_png": "false"})
         with self.assertRaisesRegex(ValueError, "ocr.language_hints"):
-            parse_ocr({"language_hints": "vi"})
+            _parse_ocr({"language_hints": "vi"})
         with self.assertRaisesRegex(ValueError, "source.type"):
-            parse_source({"type": 1})
+            _parse_source({"type": 1})
 
     def test_rejects_incomplete_veridian_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

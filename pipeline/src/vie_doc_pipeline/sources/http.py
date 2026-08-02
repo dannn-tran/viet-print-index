@@ -70,31 +70,31 @@ class HttpClient:
         )
 
     def fetch_bytes(self, url: str) -> bytes:
-        encoded_url = encode_url(url)
-        retry = retry_policy(self.policy)
+        encoded_url = _encode_url(url)
+        retry = _retry_policy(self.policy)
         while True:
             try:
-                response = self.request_once(encoded_url)
+                response = self._request_once(encoded_url)
             except HTTPError as error:
-                retry = self.retry_after_error(retry, encoded_url, error)
+                retry = self._retry_after_error(retry, encoded_url, error)
                 continue
             if retry.is_retry("GET", response.status, "retry-after" in response.headers):
-                retry = self.retry_after_response(retry, encoded_url, response)
+                retry = self._retry_after_response(retry, encoded_url, response)
                 continue
-            return response_data(url, response)
+            return _response_data(url, response)
 
-    def request_once(self, url: str) -> urllib3.BaseHTTPResponse:
+    def _request_once(self, url: str) -> urllib3.BaseHTTPResponse:
         """Make one rate-gated GET attempt; retry policy remains explicit above."""
         self.gate.wait_for_turn()
         return self.pool.request("GET", url, retries=False, preload_content=True)
 
-    def retry_after_error(self, retry: Retry, url: str, error: HTTPError) -> Retry:
+    def _retry_after_error(self, retry: Retry, url: str, error: HTTPError) -> Retry:
         """Advance retry state and pause after a transport failure."""
         next_retry = self._next_retry(retry, url, error=error)
         next_retry.sleep()
         return next_retry
 
-    def retry_after_response(
+    def _retry_after_response(
         self, retry: Retry, url: str, response: urllib3.BaseHTTPResponse
     ) -> Retry:
         """Advance retry state, release the response, and honour its retry delay."""
@@ -126,7 +126,7 @@ def http_client(policy: SourceRequestsConfig) -> HttpClient:
     return HttpClient(policy)
 
 
-def retry_policy(policy: SourceRequestsConfig) -> Retry:
+def _retry_policy(policy: SourceRequestsConfig) -> Retry:
     """Build the immutable urllib3 retry policy used for every request."""
     retries = policy.max_attempts - 1
     return Retry(
@@ -145,7 +145,7 @@ def retry_policy(policy: SourceRequestsConfig) -> Retry:
     )
 
 
-def response_data(url: str, response: urllib3.BaseHTTPResponse) -> bytes:
+def _response_data(url: str, response: urllib3.BaseHTTPResponse) -> bytes:
     """Return a successful response body while always releasing its connection."""
     try:
         if response.status >= 400:
@@ -155,7 +155,7 @@ def response_data(url: str, response: urllib3.BaseHTTPResponse) -> bytes:
         response.release_conn()
 
 
-def encode_url(url: str) -> str:
+def _encode_url(url: str) -> str:
     """Percent-encode Unicode path/query text while preserving existing escapes."""
     parts = urllib.parse.urlsplit(url)
     path = urllib.parse.quote(parts.path, safe="/:@!$&'()*+,;=%-")

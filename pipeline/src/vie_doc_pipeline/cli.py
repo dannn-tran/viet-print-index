@@ -106,7 +106,7 @@ def images_normalize(
 ) -> None:
     """Create or designate durable presentation and OCR image assets."""
     state, state_path = _open_run(config_path, state_path)
-    selection = normalization_selection(source_id, image_id)
+    selection = _normalization_selection(source_id, image_id)
     if inverted:
         match selection:
             case SourceNormalizationCandidates():
@@ -122,7 +122,7 @@ def images_normalize(
     print(f"State file  : {state_path}")
 
 
-def normalization_selection(source_id: str | None, image_id: str | None) -> NormalizationSelection:
+def _normalization_selection(source_id: str | None, image_id: str | None) -> NormalizationSelection:
     if source_id and image_id:
         raise typer.BadParameter("Specify at most one of --source-id or --image-id")
     if source_id:

@@ -1,7 +1,7 @@
 import unittest
 
 from vie_doc_pipeline.config import SourceRequestsConfig
-from vie_doc_pipeline.sources.http import RequestGate, retry_policy
+from vie_doc_pipeline.sources.http import RequestGate, _retry_policy
 
 
 class RequestGateTest(unittest.TestCase):
@@ -21,7 +21,7 @@ class RequestGateTest(unittest.TestCase):
         self.assertEqual(sleeps, [1.0, 1.0])
 
     def test_retry_policy_uses_the_configured_attempt_budget(self) -> None:
-        policy = retry_policy(SourceRequestsConfig(max_attempts=4, backoff_factor=0.5))
+        policy = _retry_policy(SourceRequestsConfig(max_attempts=4, backoff_factor=0.5))
 
         self.assertEqual(policy.total, 3)
         self.assertEqual(policy.backoff_factor, 0.5)
