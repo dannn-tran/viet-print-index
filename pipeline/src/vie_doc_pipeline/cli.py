@@ -6,22 +6,22 @@ from typing import Annotated, Optional
 
 import typer
 
-from vie_doc_pipeline.logging import configure_logging
+from vie_doc_pipeline.common.logging import configure_logging
 from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
-from vie_doc_pipeline.ledger.projection import PipelineState
-from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.config import load_config
+from vie_doc_pipeline.state import PipelineState
+from vie_doc_pipeline.common.assets import ImageAsset
+from vie_doc_pipeline.common.config import load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
-from vie_doc_pipeline.workflow.discover_source import SourceAssetDiscoveryService
-from vie_doc_pipeline.workflow.fetch_source import SourceAssetFetchService
-from vie_doc_pipeline.workflow.normalize_images import (
+from vie_doc_pipeline.sources.discover import SourceAssetDiscoveryService
+from vie_doc_pipeline.sources.fetch import SourceAssetFetchService
+from vie_doc_pipeline.images.normalize import (
     AllNormalizationCandidates,
     ImageNormalizationService,
     ImageNormalizationCandidates,
     SourceNormalizationCandidates,
     NormalizationSelection,
 )
-from vie_doc_pipeline.workflow.ocr import OcrJobSubmissionService, OcrStatusService
+from vie_doc_pipeline.ocr.service import OcrJobSubmissionService, OcrStatusService
 
 configure_logging()
 app = typer.Typer(help="Viet Print Index source-to-OCR pipeline")

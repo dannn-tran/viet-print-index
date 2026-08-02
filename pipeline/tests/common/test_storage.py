@@ -1,8 +1,8 @@
 import tempfile
 import unittest
 
-from vie_doc_pipeline.config import LocalTarget
-from vie_doc_pipeline.storage import LocalTargetStore
+from vie_doc_pipeline.common.config import LocalTarget
+from vie_doc_pipeline.common.storage import LocalTargetStore
 
 
 class LocalTargetStoreTest(unittest.TestCase):

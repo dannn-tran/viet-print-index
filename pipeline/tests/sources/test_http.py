@@ -1,6 +1,6 @@
 import unittest
 
-from vie_doc_pipeline.config import SourceRequestsConfig
+from vie_doc_pipeline.common.config import SourceRequestsConfig
 from vie_doc_pipeline.sources.http import RequestGate, _retry_policy
 
 

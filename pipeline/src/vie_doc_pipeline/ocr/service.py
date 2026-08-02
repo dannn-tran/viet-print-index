@@ -8,9 +8,9 @@ from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
-from vie_doc_pipeline.ledger.projection import PipelineState
-from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.config import GcsTarget
+from vie_doc_pipeline.state import PipelineState
+from vie_doc_pipeline.common.assets import ImageAsset
+from vie_doc_pipeline.common.config import GcsTarget
 
 
 @dataclass(frozen=True)

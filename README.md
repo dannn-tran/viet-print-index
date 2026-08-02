@@ -27,14 +27,15 @@ Full-text search and browse over historical Vietnamese periodicals, powered by G
 Two toolchains, one contract. The configured target is the durable store and the
 handoff point between them; production runs normally use GCS.
 
-The Python package keeps the workflow boundaries visible: `config.py` decodes
-TOML into typed values, `assets.py` owns the cross-stage asset contract,
-`sources/` owns source discovery contracts, factories, and HTTP adapters,
-`images/` owns PDF/image transformations and calibration contracts,
-`ledger/` contains the event-store implementation, event contracts, and
-application-state projection, and
-`workflow/` owns the staged orchestration and its result contracts. External
-clients are created and closed by the stage or provider that owns their lifetime.
+The Python package keeps the domain boundaries visible: `common/` owns
+cross-domain configuration, asset, storage, and logging capabilities;
+`sources/` owns source discovery, source fetching, provider contracts, and
+HTTP/catalogue adapters; `images/` owns image normalization, PDF/image
+transformations, and calibration; `ocr/` owns OCR submission and status checks;
+`ledger/` contains the append-only event-store implementation and event
+contracts; and `state.py` owns the application state that replays those events
+into workflow decisions. External clients are created and closed by the stage
+or provider that owns their lifetime.
 
 | Toolchain | Responsibilities |
 |-----------|-----------------|

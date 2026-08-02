@@ -1,4 +1,4 @@
-"""Source discovery contract and its returned record."""
+"""Source item model and provider contract."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from vie_doc_pipeline.assets import AssetKind
+from vie_doc_pipeline.common.assets import AssetKind
 
 
 @dataclass(frozen=True)

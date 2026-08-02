@@ -3,7 +3,7 @@ from itertools import islice
 import unittest
 from unittest.mock import patch
 
-from vie_doc_pipeline.config import GcsTarget, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
+from vie_doc_pipeline.common.config import GcsTarget, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.sources.http import _encode_url
 from vie_doc_pipeline.sources.factory import open_source_items

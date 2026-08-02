@@ -6,7 +6,7 @@ from pathlib import Path
 import fitz
 
 from vie_doc_pipeline.images.pdf import ExplodeParams, explode_pdf_bytes
-from vie_doc_pipeline.config import PipelineConfig
+from vie_doc_pipeline.common.config import PipelineConfig
 
 
 @dataclass(frozen=True)

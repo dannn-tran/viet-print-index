@@ -1,4 +1,10 @@
-"""Event-backed pipeline state and its asset lifecycle projection."""
+"""Application state for the event-backed source-to-OCR pipeline.
+
+``PipelineState`` owns the event-store lifetime and applies lifecycle events to
+the in-memory asset projection.  The event store itself remains a persistence
+boundary under :mod:`vie_doc_pipeline.ledger`; this module is the application
+state boundary that workflows consume.
+"""
 
 from __future__ import annotations
 
@@ -6,10 +12,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import time
 
-from vie_doc_pipeline.config import PipelineConfig
+from vie_doc_pipeline.common.config import PipelineConfig
 from vie_doc_pipeline.ledger.events import EventRecord, configuration_bound
 from vie_doc_pipeline.ledger.store import EventStore
-from vie_doc_pipeline.assets import SourceAsset, _source_asset_from_dict
+from vie_doc_pipeline.common.assets import SourceAsset, _source_asset_from_dict
 
 
 @dataclass(frozen=True)

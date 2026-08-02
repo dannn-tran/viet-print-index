@@ -1,4 +1,4 @@
-from vie_doc_pipeline.config import LocalPdfSource, LocalTarget, OcrConfig, PipelineConfig, PublicationConfig
+from vie_doc_pipeline.common.config import LocalPdfSource, LocalTarget, OcrConfig, PipelineConfig, PublicationConfig
 from vie_doc_pipeline.images.pdf import ExplodeParams
 
 

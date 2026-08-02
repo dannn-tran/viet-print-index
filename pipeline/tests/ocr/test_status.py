@@ -3,13 +3,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from vie_doc_pipeline.config import GcsTarget, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
+from vie_doc_pipeline.common.config import GcsTarget, LocalPdfSource, OcrConfig, PipelineConfig, PublicationConfig
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, source_discovered
-from vie_doc_pipeline.ledger.projection import PipelineState
-from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.workflow.ocr import _parse_gs_uri
-from vie_doc_pipeline.workflow.ocr import OcrStatusService
+from vie_doc_pipeline.state import PipelineState
+from vie_doc_pipeline.common.assets import ImageAsset
+from vie_doc_pipeline.ocr.service import _parse_gs_uri
+from vie_doc_pipeline.ocr.service import OcrStatusService
 from support import sample_pipeline_config
 
 
@@ -36,7 +36,7 @@ class OcrStateTest(unittest.TestCase):
             state = PipelineState.open(path, config)
             state.record(source_discovered(asset))
             state.record(ocr_job_submitted([asset.key], job_id="job-1", output_prefix="gs://bucket/pub/ocr/job-1")[0])
-            with patch("vie_doc_pipeline.workflow.ocr.storage.Client", return_value=client):
+            with patch("vie_doc_pipeline.ocr.service.storage.Client", return_value=client):
                 summary = OcrStatusService(state).execute()
 
         self.assertEqual((summary.completed, summary.pending), (0, 1))

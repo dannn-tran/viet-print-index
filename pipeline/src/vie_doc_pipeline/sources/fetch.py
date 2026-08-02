@@ -13,10 +13,10 @@ from itertools import islice
 from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import EventRecord, failed, source_fetched
-from vie_doc_pipeline.ledger.projection import PipelineState
+from vie_doc_pipeline.state import PipelineState
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
-from vie_doc_pipeline.assets import SourceAsset
-from vie_doc_pipeline.storage import TargetStore, open_target_store
+from vie_doc_pipeline.common.assets import SourceAsset
+from vie_doc_pipeline.common.storage import TargetStore, open_target_store
 
 logger = logging.getLogger(__name__)
 

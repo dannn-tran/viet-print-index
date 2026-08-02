@@ -6,9 +6,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from vie_doc_pipeline.ledger.events import source_discovered, source_fetched
-from vie_doc_pipeline.ledger.projection import PipelineState
-from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.config import (
+from vie_doc_pipeline.state import PipelineState
+from vie_doc_pipeline.common.assets import ImageAsset
+from vie_doc_pipeline.common.config import (
     GcsTarget,
     OcrConfig,
     PipelineConfig,
@@ -18,8 +18,8 @@ from vie_doc_pipeline.config import (
     WebPagePdfSource,
 )
 from vie_doc_pipeline.images.pdf import ExplodeParams
-from vie_doc_pipeline.workflow.discover_source import SourceAssetDiscoveryService, _asset_from_source_item
-from vie_doc_pipeline.workflow.normalize_images import ImageNormalizationService
+from vie_doc_pipeline.sources.discover import SourceAssetDiscoveryService, _asset_from_source_item
+from vie_doc_pipeline.images.normalize import ImageNormalizationService
 
 
 class AssetDiscoveryTest(unittest.TestCase):
@@ -56,8 +56,8 @@ class AssetDiscoveryTest(unittest.TestCase):
             state.record(source_fetched(asset, checksum="checksum", size_bytes=10))
             store = _FakeTargetStore()
 
-            with patch("vie_doc_pipeline.workflow.normalize_images.open_target_store", return_value=nullcontext(store)), \
-                 patch("vie_doc_pipeline.workflow.normalize_images.check_inversion") as check:
+            with patch("vie_doc_pipeline.images.normalize.open_target_store", return_value=nullcontext(store)), \
+                 patch("vie_doc_pipeline.images.normalize.check_inversion") as check:
                 check.return_value = Mock(inverted=False, needs_review=False)
                 summary = ImageNormalizationService(state).execute()
 
@@ -98,7 +98,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             state = PipelineState.open(state_path, config)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
-                "vie_doc_pipeline.workflow.discover_source.open_source_items",
+                "vie_doc_pipeline.sources.discover.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider([source_item])),
             ):
                 self.assertEqual(len(SourceAssetDiscoveryService(state).execute()), 1)
@@ -121,7 +121,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             state_path = Path(directory) / "state.jsonl"
             state = PipelineState.open(state_path, config)
             with patch(
-                "vie_doc_pipeline.workflow.discover_source.open_source_items",
+                "vie_doc_pipeline.sources.discover.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),
             ):
                 self.assertEqual(len(SourceAssetDiscoveryService(state).execute(limit=1)), 1)

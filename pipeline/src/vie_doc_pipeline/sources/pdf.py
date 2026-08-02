@@ -7,7 +7,7 @@ import urllib.parse
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
+from vie_doc_pipeline.sources.models import DiscoveredSourceItem
 
 
 def iter_source_items_from_web_page(page_url: str, page_html: str) -> Iterator[DiscoveredSourceItem]:

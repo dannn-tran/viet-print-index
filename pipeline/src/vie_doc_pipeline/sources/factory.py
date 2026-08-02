@@ -6,8 +6,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem, SourceItemProvider
-from vie_doc_pipeline.config import (
+from vie_doc_pipeline.sources.models import DiscoveredSourceItem, SourceItemProvider
+from vie_doc_pipeline.common.config import (
     LocalPdfSource,
     PipelineConfig,
     UrlListPdfSource,

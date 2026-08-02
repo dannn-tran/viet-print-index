@@ -14,11 +14,11 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.projection import InversionOverrides, PipelineState
-from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
-from vie_doc_pipeline.config import PipelineConfig
+from vie_doc_pipeline.state import InversionOverrides, PipelineState
+from vie_doc_pipeline.common.assets import ImageAsset, PdfAsset, SourceAsset
+from vie_doc_pipeline.common.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
-from vie_doc_pipeline.storage import TargetStore, open_target_store
+from vie_doc_pipeline.common.storage import TargetStore, open_target_store
 
 logger = logging.getLogger(__name__)
 

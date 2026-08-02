@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from vie_doc_pipeline.assets import ImageAsset
+from vie_doc_pipeline.common.assets import ImageAsset
 from vie_doc_pipeline.ledger.events import image_normalized, source_discovered
-from vie_doc_pipeline.ledger.projection import PipelineState
+from vie_doc_pipeline.state import PipelineState
 from vie_doc_pipeline.ledger.store import EventStore
 from support import sample_pipeline_config
 

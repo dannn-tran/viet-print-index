@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from dataclasses import dataclass
 from typing import Literal
 
-from vie_doc_pipeline.assets import SourceAsset
+from vie_doc_pipeline.common.assets import SourceAsset
 
 Asset = SourceAsset
 

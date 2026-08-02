@@ -3,12 +3,12 @@ import unittest
 from google.api_core import exceptions as google_exceptions
 import typer
 from vie_doc_pipeline.cli import _normalization_selection
-from vie_doc_pipeline.assets import PdfAsset
+from vie_doc_pipeline.common.assets import PdfAsset
 from vie_doc_pipeline.ledger.events import failed, source_fetched
 from vie_doc_pipeline.sources.http import SourceHttpError, TransientSourceError
-from vie_doc_pipeline.workflow.fetch_source import AlreadyPresent, Fetched, FetchFailed, _failure_details, _summarize_fetches
-from vie_doc_pipeline.workflow.normalize_images import _summarize_normalization
-from vie_doc_pipeline.workflow.normalize_images import AllNormalizationCandidates, ImageNormalizationCandidates, NormalizationSummary, SourceNormalizationCandidates
+from vie_doc_pipeline.sources.fetch import AlreadyPresent, Fetched, FetchFailed, _failure_details, _summarize_fetches
+from vie_doc_pipeline.images.normalize import _summarize_normalization
+from vie_doc_pipeline.images.normalize import AllNormalizationCandidates, ImageNormalizationCandidates, NormalizationSummary, SourceNormalizationCandidates
 
 
 class WorkflowResultTest(unittest.TestCase):

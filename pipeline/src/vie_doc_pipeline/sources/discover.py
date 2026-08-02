@@ -5,12 +5,12 @@ from pathlib import PurePosixPath
 import urllib.parse
 from dataclasses import dataclass
 
-from vie_doc_pipeline.assets import PdfAsset, SourceAsset, ImageAsset
-from vie_doc_pipeline.config import PipelineConfig
-from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
+from vie_doc_pipeline.common.assets import PdfAsset, SourceAsset, ImageAsset
+from vie_doc_pipeline.common.config import PipelineConfig
+from vie_doc_pipeline.sources.models import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
-from vie_doc_pipeline.ledger.projection import PipelineState
+from vie_doc_pipeline.state import PipelineState
 
 
 def _asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:

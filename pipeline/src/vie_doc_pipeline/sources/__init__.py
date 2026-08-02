@@ -1,1 +1,1 @@
-"""Source adapters for external catalogues, pages, files, and URLs."""
+"""Source discovery, fetching, and adapters for external material."""

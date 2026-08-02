@@ -1,6 +1,6 @@
 import unittest
 
-from vie_doc_pipeline.assets import PdfAsset
+from vie_doc_pipeline.common.assets import PdfAsset
 
 
 class PdfAssetTest(unittest.TestCase):

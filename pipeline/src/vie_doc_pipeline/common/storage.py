@@ -11,7 +11,7 @@ from collections.abc import Iterator
 
 from google.cloud import storage as gcs_storage
 
-from vie_doc_pipeline.config import GcsTarget, LocalTarget, TargetStorage
+from vie_doc_pipeline.common.config import GcsTarget, LocalTarget, TargetStorage
 
 
 @dataclass(frozen=True)

@@ -13,9 +13,9 @@ from vie_doc_pipeline.ledger.events import (
     source_fetched,
     source_inverted,
 )
-from vie_doc_pipeline.ledger.projection import ConfigurationMismatchError, PipelineState
+from vie_doc_pipeline.state import ConfigurationMismatchError, PipelineState
 from vie_doc_pipeline.ledger.store import EventStore
-from vie_doc_pipeline.assets import ImageAsset
+from vie_doc_pipeline.common.assets import ImageAsset
 from support import sample_pipeline_config
 
 

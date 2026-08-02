@@ -13,7 +13,7 @@ import urllib3
 from urllib3.exceptions import HTTPError, MaxRetryError
 from urllib3.util import Retry, Timeout
 
-from vie_doc_pipeline.config import SourceRequestsConfig
+from vie_doc_pipeline.common.config import SourceRequestsConfig
 
 _CHARSET_RE = re.compile(r"charset=([^; ]+)", re.IGNORECASE)
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
