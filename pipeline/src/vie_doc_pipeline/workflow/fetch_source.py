@@ -15,8 +15,7 @@ from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import EventRecord, failed, source_fetched
 from vie_doc_pipeline.ledger.locking import LockUnavailableError
-from vie_doc_pipeline.ledger.projection import AppState
-from vie_doc_pipeline.config import PipelineConfig
+from vie_doc_pipeline.ledger.projection import PipelineState
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
 from vie_doc_pipeline.storage import TargetStore, open_target_store
@@ -96,29 +95,36 @@ class FetchContext:
         return result
 
 
-def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | None = None) -> FetchSummary:
-    """Fetch discovered source assets into the configured target."""
-    with _source_fetch_lock(state):
-        with open_target_store(config.target) as store:
-            assets = islice(state.eligible_source_assets(), limit)
-            client = http_client(config.source_requests)
-            try:
-                context = FetchContext(
-                    store=store,
-                    http=client,
-                    retry_delay=config.source_requests.backoff_max_seconds,
-                )
-                outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
-                recorded: list[FetchOutcome] = []
-                for outcome in outcomes:
-                    state.record(outcome.event)
-                    recorded.append(outcome)
-                return summarize_fetches(recorded)
-            finally:
-                client.close()
+@dataclass
+class SourceAssetFetchService:
+    """Fetch discovered source assets and persist the outcomes."""
+
+    state: PipelineState
+
+    def execute(self, limit: int | None = None) -> FetchSummary:
+        """Fetch discovered source assets into the configured target."""
+        config = self.state.configuration
+        with _source_fetch_lock(self.state):
+            with open_target_store(config.target) as store:
+                assets = islice(self.state.eligible_source_assets(), limit)
+                client = http_client(config.source_requests)
+                try:
+                    context = FetchContext(
+                        store=store,
+                        http=client,
+                        retry_delay=config.source_requests.backoff_max_seconds,
+                    )
+                    outcomes = run_fetches(context, assets, config.source_requests.max_concurrent_requests)
+                    recorded: list[FetchOutcome] = []
+                    for outcome in outcomes:
+                        self.state.record(outcome.event)
+                        recorded.append(outcome)
+                    return summarize_fetches(recorded)
+                finally:
+                    client.close()
 
 @contextmanager
-def _source_fetch_lock(state: AppState) -> Iterator[None]:
+def _source_fetch_lock(state: PipelineState) -> Iterator[None]:
     """Serialize source-fetch commands for one event store."""
     try:
         with state.lock(".source-fetch.lock", non_blocking=True):

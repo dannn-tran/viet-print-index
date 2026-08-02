@@ -14,7 +14,7 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.projection import AppState, InversionOverrides
+from vie_doc_pipeline.ledger.projection import InversionOverrides, PipelineState
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
@@ -54,29 +54,34 @@ NormalizationSelection = (
 class NormalizationContext:
     """External capabilities and fixed inputs for one normalisation-stage run."""
 
-    config: PipelineConfig
-    state: AppState
+    state: PipelineState
     store: TargetStore
     overrides: InversionOverrides
 
 
-def normalize_images(
-    config: PipelineConfig,
-    state: AppState,
-    limit: int | None = None,
-    selection: NormalizationSelection = AllNormalizationCandidates(),
-) -> NormalizationSummary:
-    """Create image assets from PDFs or designate native images without copying."""
-    with open_target_store(config.target) as store:
-        overrides = state.inversion_overrides
-        assets = iter_normalization_candidates(state, selection, limit)
-        context = NormalizationContext(config, state, store, overrides)
-        results = (normalize_asset(context, asset) for asset in assets)
-        return summarize_normalization(results)
+@dataclass
+class ImageNormalizationService:
+    """Create or designate durable image assets for presentation and OCR."""
+
+    state: PipelineState
+
+    def execute(
+        self,
+        limit: int | None = None,
+        selection: NormalizationSelection = AllNormalizationCandidates(),
+    ) -> NormalizationSummary:
+        """Create image assets from PDFs or designate native images without copying."""
+        config = self.state.configuration
+        with open_target_store(config.target) as store:
+            overrides = self.state.inversion_overrides
+            assets = iter_normalization_candidates(self.state, selection, limit)
+            context = NormalizationContext(self.state, store, overrides)
+            results = (normalize_asset(context, asset) for asset in assets)
+            return summarize_normalization(results)
 
 
 def iter_normalization_candidates(
-    state: AppState,
+    state: PipelineState,
     selection: NormalizationSelection,
     limit: int | None,
 ) -> Iterator[SourceAsset]:
@@ -132,7 +137,7 @@ def normalize_pdf_asset(
     """Render one PDF and store its presentation/OCR image assets."""
     pdf_bytes = context.store.read_bytes(asset.target_path)
     created = 0
-    for image, image_bytes in iter_pdf_image_assets(context.config, asset, pdf_bytes, context.overrides):
+    for image, image_bytes in iter_pdf_image_assets(context.state.configuration, asset, pdf_bytes, context.overrides):
         store_pdf_image(context.store, image, image_bytes)
         context.state.record(image_normalized(image))
         created += 1

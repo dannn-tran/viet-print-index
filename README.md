@@ -112,8 +112,8 @@ vie-pipeline ocr check-status <config-path> # report completed/pending OCR outpu
   source, a PDF index page, a URL sequence, a URL list, and a local directory
   therefore cannot be confused at runtime.
 - The event store is the durable, human-inspectable event history; Python
-  replays it into typed in-memory application state for workflow decisions.
-- Each command replays its event store once and passes the resulting application
+  replays it into typed in-memory pipeline state for workflow decisions.
+- Each command replays its event store once and passes the resulting pipeline
   state through the workflow; stages update that state through `state.record()`.
 - The first event records the exact TOML configuration. A different
   configuration cannot silently mix state, and historical settings remain

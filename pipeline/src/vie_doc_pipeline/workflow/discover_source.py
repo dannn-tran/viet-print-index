@@ -3,16 +3,17 @@
 from itertools import islice
 from pathlib import PurePosixPath
 import urllib.parse
+from dataclasses import dataclass
 
 from vie_doc_pipeline.assets import PdfAsset, SourceAsset, ImageAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.contracts import DiscoveredSourceItem
 from vie_doc_pipeline.sources.factory import open_source_items
 from vie_doc_pipeline.ledger.events import source_discovered
-from vie_doc_pipeline.ledger.projection import AppState
+from vie_doc_pipeline.ledger.projection import PipelineState
 
 
-def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
+def _asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
     """Convert one source-provider record into a durable asset identity."""
     if item.kind == "image":
         if not item.issue_id or not item.page_id:
@@ -37,17 +38,22 @@ def asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -
     )
 
 
-def discover_source_assets(
-    config: PipelineConfig, state: AppState, limit: int | None = None
-) -> list[SourceAsset]:
-    """Discover external source records that are not already recorded."""
-    with open_source_items(config) as source_items:
-        known_asset_keys = set(state.asset_keys())
-        new_assets: list[SourceAsset] = []
-        for item in islice(source_items.iter_source_items(), limit):
-            asset = asset_from_source_item(config, item)
-            if asset.key not in known_asset_keys:
-                state.record(source_discovered(asset))
-                known_asset_keys.add(asset.key)
-                new_assets.append(asset)
-        return new_assets
+@dataclass
+class SourceAssetDiscoveryService:
+    """Discover source records and persist new source assets."""
+
+    state: PipelineState
+
+    def execute(self, limit: int | None = None) -> list[SourceAsset]:
+        """Discover external source records that are not already recorded."""
+        config = self.state.configuration
+        with open_source_items(config) as source_items:
+            known_asset_keys = set(self.state.asset_keys())
+            new_assets: list[SourceAsset] = []
+            for item in islice(source_items.iter_source_items(), limit):
+                asset = _asset_from_source_item(config, item)
+                if asset.key not in known_asset_keys:
+                    self.state.record(source_discovered(asset))
+                    known_asset_keys.add(asset.key)
+                    new_assets.append(asset)
+            return new_assets

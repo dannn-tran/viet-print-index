@@ -1,4 +1,4 @@
-"""Event-backed application state and its asset lifecycle projection."""
+"""Event-backed pipeline state and its asset lifecycle projection."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import time
 
+from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.ledger.events import EventRecord, configuration_bound
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import SourceAsset, source_asset_from_dict
@@ -46,12 +47,17 @@ class ConfigurationMismatchError(ValueError):
 
 
 @dataclass
-class AppState:
-    """Event-backed application state and its private asset projection."""
+class PipelineState:
+    """Event-backed pipeline state and its private asset projection."""
 
     _event_store: EventStore
     _assets: dict[str, AssetState]
+    _config: PipelineConfig
     _source_inversion_overrides: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self._config.config_toml is None:
+            raise ValueError("PipelineState requires a configuration loaded from TOML")
 
     @property
     def inversion_overrides(self) -> InversionOverrides:
@@ -62,6 +68,11 @@ class AppState:
                 key for key, state in self._assets.items() if state.inverted_override
             ),
         )
+
+    @property
+    def configuration(self) -> PipelineConfig:
+        """Return the immutable configuration for this job run."""
+        return self._config
 
     def asset_keys(self) -> tuple[str, ...]:
         """Return the keys of all assets currently known to the projection."""
@@ -107,20 +118,22 @@ class AppState:
         )
 
     @classmethod
-    def open(cls, state_path: Path, config_toml: str | None) -> "AppState":
-        """Open, replay, and bind one application state to its configuration."""
+    def open(cls, state_path: Path, config: PipelineConfig) -> "PipelineState":
+        """Open, replay, and register one pipeline state configuration."""
+        if config.config_toml is None:
+            raise ValueError("PipelineState requires a configuration loaded from TOML")
         event_store = EventStore.open(state_path)
-        state = cls(event_store, {})
+        state = cls(event_store, {}, config)
+        state._register_configuration()
         for event in event_store.iter_events():
             state._apply(event)
-        state.bind_configuration(config_toml)
         return state
 
-    def bind_configuration(self, config_toml: str | None) -> None:
-        """Record the initial TOML configuration or reject a mismatch."""
+    def _register_configuration(self) -> None:
+        """Record this run's configuration or validate the existing first event."""
+        config_toml = self._config.config_toml
         if config_toml is None:
-            return
-
+            raise ValueError("PipelineState requires a configuration loaded from TOML")
         first = self._event_store.first_event()
         if first is None:
             self.record(configuration_bound(config_toml))
@@ -144,7 +157,7 @@ class AppState:
 
     @contextmanager
     def lock(self, suffix: str, *, non_blocking: bool = False) -> Iterator[None]:
-        """Hold a named lock owned by this application state."""
+        """Hold a named lock owned by this pipeline state."""
         with self._event_store.lock(suffix, non_blocking=non_blocking):
             yield
 

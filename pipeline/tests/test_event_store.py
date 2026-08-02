@@ -5,19 +5,22 @@ from pathlib import Path
 
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.ledger.events import image_normalized, source_discovered
-from vie_doc_pipeline.ledger.projection import AppState
+from vie_doc_pipeline.ledger.projection import PipelineState
 from vie_doc_pipeline.ledger.store import EventStore
+from support import sample_pipeline_config
 
 
 class EventStoreTest(unittest.TestCase):
     def test_replay_streams_events_and_record_updates_store_and_projection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.jsonl"
+            config = sample_pipeline_config()
+            PipelineState.open(path, config)
             store = EventStore.open(path)
             asset = ImageAsset("pub", "issue", "001", "https://example.test/1.jpg", "pub/images/1.jpg")
             store.append(source_discovered(asset))
 
-            state = AppState.open(path, None)
+            state = PipelineState.open(path, config)
             projected = state.asset_state(asset.key)
             self.assertIsNotNone(projected)
             self.assertEqual(projected.asset if projected else None, asset)
@@ -26,7 +29,7 @@ class EventStoreTest(unittest.TestCase):
             projected = state.asset_state(asset.key)
             self.assertIsNotNone(projected)
             self.assertEqual(projected.event if projected else None, "image_normalized")
-            self.assertEqual(len(list(store.iter_events())), 2)
+            self.assertEqual(len(list(store.iter_events())), 3)
 
     def test_concurrent_appends_remain_parseable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -43,18 +46,20 @@ class EventStoreTest(unittest.TestCase):
     def test_replay_repairs_an_incomplete_final_record(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.jsonl"
+            config = sample_pipeline_config()
+            PipelineState.open(path, config)
             store = EventStore.open(path)
             asset = ImageAsset("pub", "issue", "001", "https://example.test/1.jpg", "pub/1.jpg")
             store.append(source_discovered(asset))
             with path.open("ab") as handle:
                 handle.write(b'{"event":"source_discovered"')
 
-            state = AppState.open(path, None)
+            state = PipelineState.open(path, config)
 
             projected = state.asset_state(asset.key)
             self.assertIsNotNone(projected)
             self.assertTrue(projected.asset if projected else None)
-            self.assertEqual(len(list(store.iter_events())), 1)
+            self.assertEqual(len(list(store.iter_events())), 2)
 
     def test_first_event_reads_only_the_initial_record(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -8,9 +8,9 @@ from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
-from vie_doc_pipeline.ledger.projection import AppState
+from vie_doc_pipeline.ledger.projection import PipelineState
 from vie_doc_pipeline.assets import ImageAsset
-from vie_doc_pipeline.config import GcsTarget, PipelineConfig
+from vie_doc_pipeline.config import GcsTarget
 
 
 @dataclass(frozen=True)
@@ -24,40 +24,53 @@ class OcrSubmissionSummary:
     submitted: int = 0
 
 
-def submit_ocr_jobs(config: PipelineConfig, state: AppState, limit: int | None = None) -> OcrSubmissionSummary:
-    target = _require_gcs_target(config.target)
-    assets = list(islice((
-        item.asset
-        for item in state.asset_states_with_event("image_normalized")
-        if isinstance(item.asset, ImageAsset)
-    ), limit))
-    if not assets:
-        return OcrSubmissionSummary()
+@dataclass
+class OcrJobSubmissionService:
+    """Submit OCR jobs for normalized image assets."""
 
-    command = RunBatchOcrCommand(
-        input_bucket=target.bucket,
-        output_bucket=target.bucket,
-        output_dir=target.ocr_output_prefix,
-        language_hints=config.ocr.language_hints,
-    )
-    uri_to_asset = {f"gs://{target.bucket}/{asset.target_path}": asset for asset in assets}
-    jobs = submit_ocr_batches(target.project, command, list(uri_to_asset))
-    for job in jobs:
-        for event in ocr_job_submitted([uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix):
-            state.record(event)
-    return OcrSubmissionSummary(submitted=len(assets))
+    state: PipelineState
+
+    def execute(self, limit: int | None = None) -> OcrSubmissionSummary:
+        config = self.state.configuration
+        target = _require_gcs_target(config.target)
+        assets = list(islice((
+            item.asset
+            for item in self.state.asset_states_with_event("image_normalized")
+            if isinstance(item.asset, ImageAsset)
+        ), limit))
+        if not assets:
+            return OcrSubmissionSummary()
+
+        command = RunBatchOcrCommand(
+            input_bucket=target.bucket,
+            output_bucket=target.bucket,
+            output_dir=target.ocr_output_prefix,
+            language_hints=config.ocr.language_hints,
+        )
+        uri_to_asset = {f"gs://{target.bucket}/{asset.target_path}": asset for asset in assets}
+        jobs = submit_ocr_batches(target.project, command, list(uri_to_asset))
+        for job in jobs:
+            for event in ocr_job_submitted([uri_to_asset[uri].key for uri in job.input_uris], job_id=job.job_id, output_prefix=job.output_prefix):
+                self.state.record(event)
+        return OcrSubmissionSummary(submitted=len(assets))
 
 
-def check_ocr_status(config: PipelineConfig, state: AppState) -> OcrStatusSummary:
-    """Check for OCR results in GCS and return completed and pending image counts."""
-    _require_gcs_target(config.target)
-    with open_ocr_status_session(config, state) as session:
-        return session.check()
+@dataclass
+class OcrStatusService:
+    """Check durable storage for completed OCR results."""
+
+    state: PipelineState
+
+    def execute(self) -> OcrStatusSummary:
+        """Check for OCR results in GCS and return completed and pending image counts."""
+        _require_gcs_target(self.state.configuration.target)
+        with open_ocr_status_session(self.state) as session:
+            return session.check()
 
 
 @dataclass
 class OcrStatusSession:
-    state: AppState
+    state: PipelineState
     client: storage.Client
 
     def check(self) -> OcrStatusSummary:
@@ -82,8 +95,8 @@ class OcrStatusSession:
 
 
 @contextmanager
-def open_ocr_status_session(config: PipelineConfig, state: AppState):
-    target = _require_gcs_target(config.target)
+def open_ocr_status_session(state: PipelineState):
+    target = _require_gcs_target(state.configuration.target)
     client = storage.Client(project=target.project)
     try:
         yield OcrStatusSession(state, client)
