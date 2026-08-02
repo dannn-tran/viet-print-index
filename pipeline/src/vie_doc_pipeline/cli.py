@@ -7,9 +7,8 @@ from typing import Annotated, Optional
 import typer
 
 from vie_doc_pipeline.logging import configure_logging
-from vie_doc_pipeline.ledger.events import configuration_bound, image_inverted, source_inverted
+from vie_doc_pipeline.ledger.events import image_inverted, source_inverted
 from vie_doc_pipeline.ledger.projection import AppState
-from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import PipelineConfig, load_config
 from vie_doc_pipeline.images.calibration import run_image_calibration
@@ -38,10 +37,6 @@ _Limit = Annotated[Optional[int], typer.Option(help="Process only first N items"
 _StatePath = Annotated[Optional[Path], typer.Option("--state-path", help="Event-store state path")]
 
 
-class _ConfigurationMismatchError(ValueError):
-    """Raised when an event store belongs to another configuration."""
-
-
 def _resolve_state_path(config_path: Path, state_path: Path | None) -> Path:
     """Resolve the CLI's state-file override or its derived default."""
     if state_path is not None:
@@ -49,36 +44,11 @@ def _resolve_state_path(config_path: Path, state_path: Path | None) -> Path:
     return Path(".pipeline-state") / "v2" / f"{config_path.stem}.jsonl"
 
 
-def _bind_configuration(event_store: EventStore, config_toml: str | None) -> None:
-    """Bind the CLI run to the event store's initial TOML configuration."""
-    if config_toml is None:
-        return
-
-    first = event_store.first_event()
-    if first is None:
-        event_store.append(configuration_bound(config_toml))
-        return
-
-    if first.event != "configuration_bound":
-        raise _ConfigurationMismatchError(
-            "Event store has no bound TOML configuration as its first event",
-        )
-    recorded = first.data.get("config_toml")
-    if not isinstance(recorded, str):
-        raise _ConfigurationMismatchError("Event store contains no TOML configuration")
-    if recorded != config_toml:
-        raise _ConfigurationMismatchError(
-            "Event store belongs to a different TOML configuration",
-        )
-
-
 def _open_run(config_path: Path, state_path: Path | None) -> tuple[PipelineConfig, AppState, Path]:
     """Load configuration and replay one command's event-backed application state."""
     config = load_config(config_path)
     resolved_state_path = _resolve_state_path(config_path, state_path)
-    event_store = EventStore.open(resolved_state_path)
-    _bind_configuration(event_store, config.config_toml)
-    return config, AppState.replay(event_store), resolved_state_path
+    return config, AppState.open(resolved_state_path, config.config_toml), resolved_state_path
 
 
 @app.command()
@@ -87,7 +57,7 @@ def status(
     state_path: _StatePath = None,
 ) -> None:
     """Summarise current workflow lifecycle and review states."""
-    config, state, state_path = _open_run(config_path, state_path)
+    _, state, state_path = _open_run(config_path, state_path)
     current = state.current
     counts = Counter(item.event or "untracked" for item in current.values())
     review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)

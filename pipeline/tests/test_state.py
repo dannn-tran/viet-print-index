@@ -12,12 +12,40 @@ from vie_doc_pipeline.ledger.events import (
     source_fetched,
     source_inverted,
 )
-from vie_doc_pipeline.ledger.projection import AppState, eligible_source_assets
+from vie_doc_pipeline.ledger.projection import AppState, ConfigurationMismatchError, eligible_source_assets
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 
 
-class EventStoreProjectionTest(unittest.TestCase):
+class AppStateTest(unittest.TestCase):
+    def test_open_records_and_validates_config_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            state = AppState.open(path, "config-a")
+            state.bind_configuration("config-a")
+
+            events = list(state.event_store.iter_events())
+            self.assertEqual(events[0].event, "configuration_bound")
+            self.assertEqual(events[0].data["config_toml"], "config-a")
+            self.assertEqual(len(events), 1)
+            with self.assertRaises(ConfigurationMismatchError):
+                state.bind_configuration("config-b")
+
+    def test_open_rejects_unbound_event_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "state.jsonl"
+            store = EventStore.open(path)
+            store.append(source_discovered(ImageAsset(
+                publication_id="pub",
+                issue_id="issue",
+                page_id="001",
+                source_url="https://example.test/1",
+                target_path="pub/images/1.jpg",
+            )))
+
+            with self.assertRaisesRegex(ConfigurationMismatchError, "no bound TOML"):
+                AppState.open(path, "config-a")
+
     def test_replay_projects_inversion_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             store = EventStore.open(Path(temporary_directory) / "state.jsonl")

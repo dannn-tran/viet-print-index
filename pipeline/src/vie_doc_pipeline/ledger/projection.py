@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 import time
 
-from vie_doc_pipeline.ledger.events import EventRecord
+from vie_doc_pipeline.ledger.events import EventRecord, configuration_bound
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import SourceAsset, source_asset_from_dict
 
@@ -41,6 +42,10 @@ class InversionOverrides:
     image_keys: frozenset[str]
 
 
+class ConfigurationMismatchError(ValueError):
+    """Raised when an event store belongs to another configuration."""
+
+
 @dataclass
 class AppState:
     """Current projection coupled to the event store that records it."""
@@ -66,6 +71,34 @@ class AppState:
         for event in event_store.iter_events():
             state._apply(event)
         return state
+
+    @classmethod
+    def open(cls, state_path: Path, config_toml: str | None) -> "AppState":
+        """Open, replay, and bind one application state to its configuration."""
+        state = cls.replay(EventStore.open(state_path))
+        state.bind_configuration(config_toml)
+        return state
+
+    def bind_configuration(self, config_toml: str | None) -> None:
+        """Record the initial TOML configuration or reject a mismatch."""
+        if config_toml is None:
+            return
+
+        first = self.event_store.first_event()
+        if first is None:
+            self.record(configuration_bound(config_toml))
+            return
+        if first.event != "configuration_bound":
+            raise ConfigurationMismatchError(
+                "Event store has no bound TOML configuration as its first event",
+            )
+        recorded = first.data.get("config_toml")
+        if not isinstance(recorded, str):
+            raise ConfigurationMismatchError("Event store contains no TOML configuration")
+        if recorded != config_toml:
+            raise ConfigurationMismatchError(
+                "Event store belongs to a different TOML configuration",
+            )
 
     def record(self, event: EventRecord) -> None:
         """Append an event, then apply it to the live projection."""
