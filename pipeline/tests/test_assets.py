@@ -64,7 +64,9 @@ class AssetDiscoveryTest(unittest.TestCase):
             self.assertEqual(summary.created, 0)
             self.assertEqual(summary.native_registered, 1)
             self.assertEqual(store.uploads, [])
-            self.assertEqual(state.current[asset.key].event, "image_normalized")
+            projected = state.asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertEqual(projected.event if projected else None, "image_normalized")
             self.assertFalse(store.closed)
 
     def test_native_image_path_prefers_human_issue_label(self) -> None:

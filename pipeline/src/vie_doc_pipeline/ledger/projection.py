@@ -1,4 +1,4 @@
-"""Current application state and projection helpers over event history."""
+"""Event-backed application state and its asset lifecycle projection."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class FailureState:
 
 
 @dataclass(frozen=True)
-class CurrentAssetState:
+class AssetState:
     event: str | None = None
     at: str | None = None
     asset: SourceAsset | None = None
@@ -33,9 +33,6 @@ class CurrentAssetState:
     job_id: str | None = None
     output_prefix: str | None = None
     output_uris: tuple[str, ...] = ()
-
-
-CurrentState = dict[str, CurrentAssetState]
 
 
 @dataclass(frozen=True)
@@ -50,25 +47,68 @@ class ConfigurationMismatchError(ValueError):
 
 @dataclass
 class AppState:
-    """Current projection coupled to the event store that records it."""
+    """Event-backed application state and its private asset projection."""
 
     _event_store: EventStore
-    current: CurrentState
-    source_inversion_overrides: frozenset[str] = frozenset()
+    _assets: dict[str, AssetState]
+    _source_inversion_overrides: frozenset[str] = frozenset()
 
     @property
     def inversion_overrides(self) -> InversionOverrides:
         """Return explicit inversion decisions projected from the event history."""
         return InversionOverrides(
-            source_ids=self.source_inversion_overrides,
+            source_ids=self._source_inversion_overrides,
             image_keys=frozenset(
-                key for key, state in self.current.items() if state.inverted_override
+                key for key, state in self._assets.items() if state.inverted_override
             ),
+        )
+
+    def asset_keys(self) -> tuple[str, ...]:
+        """Return the keys of all assets currently known to the projection."""
+        return tuple(self._assets)
+
+    def asset_states(self) -> tuple[AssetState, ...]:
+        """Return a stable snapshot of all projected asset states."""
+        return tuple(self._assets.values())
+
+    def asset_state(self, asset_key: str) -> AssetState | None:
+        """Return the projected state for one asset, if known."""
+        return self._assets.get(asset_key)
+
+    def asset_states_with_event(self, event: str) -> tuple[AssetState, ...]:
+        """Return asset states whose latest lifecycle event matches."""
+        return tuple(
+            state
+            for state in self._assets.values()
+            if state.event == event and state.asset is not None
+        )
+
+    def eligible_source_assets(self, now: float | None = None) -> tuple[SourceAsset, ...]:
+        """Return discovered source assets eligible for another fetch attempt."""
+        current_time = time.time() if now is None else now
+        eligible: list[SourceAsset] = []
+        for state in self.asset_states_with_event("source_discovered"):
+            failure = state.failure
+            if failure is None:
+                eligible.append(state.asset)
+                continue
+            if failure.retryable and (
+                failure.retry_not_before is None or failure.retry_not_before <= current_time
+            ):
+                eligible.append(state.asset)
+        return tuple(eligible)
+
+    def reprocessable_assets(self) -> tuple[tuple[str, SourceAsset], ...]:
+        """Return source and image assets eligible for explicit reprocessing."""
+        return tuple(
+            (key, state.asset)
+            for key, state in self._assets.items()
+            if state.asset is not None and state.event in {"source_fetched", "image_normalized"}
         )
 
     @classmethod
     def replay(cls, event_store: EventStore) -> "AppState":
-        """Rebuild current state by applying persisted events in order."""
+        """Rebuild the projection by applying persisted events in order."""
         state = cls(event_store, {})
         for event in event_store.iter_events():
             state._apply(event)
@@ -114,25 +154,22 @@ class AppState:
             yield
 
     def _apply(self, event: EventRecord) -> None:
-        self.current = apply_event(self.current, event)
+        if event.event == "configuration_bound":
+            return
         if event.event == "source_inverted":
-            self.source_inversion_overrides = self.source_inversion_overrides | {event.asset_key}
+            self._source_inversion_overrides = self._source_inversion_overrides | {event.asset_key}
+            return
+        current = self._assets.get(event.asset_key, AssetState())
+        self._assets[event.asset_key] = _asset_state_after_event(current, event)
 
 
-def apply_event(states: CurrentState, event: EventRecord) -> CurrentState:
-    """Apply one event to a mutable projection and return that projection."""
-    if event.event == "configuration_bound":
-        return states
-    state = states.setdefault(event.asset_key, CurrentAssetState())
+def _asset_state_after_event(state: AssetState, event: EventRecord) -> AssetState:
+    """Apply one lifecycle event to one asset state."""
     if event.event == "failed":
-        states[event.asset_key] = replace(state, failure=_failure_from_event(event))
-        return states
+        return replace(state, failure=_failure_from_event(event))
     if event.event == "image_inverted":
-        states[event.asset_key] = replace(state, inverted_override=True)
-        return states
-    if event.event == "source_inverted":
-        return states
-    states[event.asset_key] = replace(
+        return replace(state, inverted_override=True)
+    return replace(
         state,
         event=event.event,
         at=event.at,
@@ -142,27 +179,6 @@ def apply_event(states: CurrentState, event: EventRecord) -> CurrentState:
         output_prefix=_string_data(event, "output_prefix") or state.output_prefix,
         output_uris=_tuple_data(event, "output_uris") or state.output_uris,
     )
-    return states
-
-
-def assets_at(current: CurrentState, event: str) -> list[CurrentAssetState]:
-    return [state for state in current.values() if state.event == event and state.asset is not None]
-
-
-def eligible_source_assets(current: CurrentState, now: float | None = None) -> list[CurrentAssetState]:
-    """Select discovered source assets that are not permanently or temporarily deferred."""
-    now = time.time() if now is None else now
-    eligible: list[CurrentAssetState] = []
-    for state in assets_at(current, "source_discovered"):
-        failure = state.failure
-        if failure is None:
-            eligible.append(state)
-            continue
-        if not failure.retryable:
-            continue
-        if failure.retry_not_before is None or failure.retry_not_before <= now:
-            eligible.append(state)
-    return eligible
 
 
 def _event_asset(event: EventRecord) -> SourceAsset | None:

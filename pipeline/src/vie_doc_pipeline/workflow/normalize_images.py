@@ -14,7 +14,7 @@ import fitz
 
 from vie_doc_pipeline.images.pdf import explode_pdf_bytes
 from vie_doc_pipeline.ledger.events import failed, image_normalized
-from vie_doc_pipeline.ledger.projection import AppState, CurrentState, InversionOverrides, assets_at
+from vie_doc_pipeline.ledger.projection import AppState, InversionOverrides
 from vie_doc_pipeline.assets import ImageAsset, PdfAsset, SourceAsset
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.images.processing import check_inversion, invert_image
@@ -28,12 +28,6 @@ class NormalizationSummary:
     created: int = 0
     native_registered: int = 0
     failed: int = 0
-
-
-@dataclass(frozen=True)
-class InversionOverrides:
-    source_ids: frozenset[str]
-    image_keys: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -74,36 +68,27 @@ def normalize_images(
 ) -> NormalizationSummary:
     """Create image assets from PDFs or designate native images without copying."""
     with open_target_store(config.target) as store:
-        current = state.current
         overrides = state.inversion_overrides
-        assets = iter_normalization_candidates(current, selection, limit)
+        assets = iter_normalization_candidates(state, selection, limit)
         context = NormalizationContext(config, state, store, overrides)
         results = (normalize_asset(context, asset) for asset in assets)
         return summarize_normalization(results)
 
 
 def iter_normalization_candidates(
-    current: CurrentState,
+    state: AppState,
     selection: NormalizationSelection,
     limit: int | None,
 ) -> Iterator[SourceAsset]:
     """Yield source assets selected for normalisation or explicit reprocessing."""
     match selection:
         case AllNormalizationCandidates():
-            candidates = (state.asset for state in assets_at(current, "source_fetched") if state.asset is not None)
+            candidates = (item.asset for item in state.asset_states_with_event("source_fetched") if item.asset is not None)
         case SourceNormalizationCandidates():
-            candidates = (asset for _, asset in iter_reprocessable_assets(current) if _source_id(asset) == selection.source_id)
+            candidates = (asset for _, asset in state.reprocessable_assets() if _source_id(asset) == selection.source_id)
         case ImageNormalizationCandidates():
-            candidates = (asset for key, asset in iter_reprocessable_assets(current) if key == selection.image_key)
+            candidates = (asset for key, asset in state.reprocessable_assets() if key == selection.image_key)
     yield from islice(candidates, limit)
-
-
-def iter_reprocessable_assets(current: CurrentState) -> Iterator[tuple[str, SourceAsset]]:
-    """Yield explicitly selected assets without repeatedly decoding event data."""
-    for key, state in tuple(current.items()):
-        if state.asset is None or state.event not in {"source_fetched", "image_normalized"}:
-            continue
-        yield key, state.asset
 
 
 def normalize_asset(

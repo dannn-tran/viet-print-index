@@ -8,7 +8,7 @@ from google.cloud import storage
 
 from gc_vision_adapter.ocr.run import RunBatchOcrCommand, submit_ocr_batches
 from vie_doc_pipeline.ledger.events import ocr_job_submitted, ocr_output_available
-from vie_doc_pipeline.ledger.projection import AppState, assets_at
+from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.assets import ImageAsset
 from vie_doc_pipeline.config import GcsTarget, PipelineConfig
 
@@ -28,7 +28,7 @@ def submit_ocr_jobs(config: PipelineConfig, state: AppState, limit: int | None =
     target = _require_gcs_target(config.target)
     assets = list(islice((
         item.asset
-        for item in assets_at(state.current, "image_normalized")
+        for item in state.asset_states_with_event("image_normalized")
         if isinstance(item.asset, ImageAsset)
     ), limit))
     if not assets:
@@ -61,11 +61,10 @@ class OcrStatusSession:
     client: storage.Client
 
     def check(self) -> OcrStatusSummary:
-        current = self.state.current
         by_job: dict[tuple[str, str], list[str]] = {}
-        for asset_key, state in current.items():
-            if state.event == "ocr_job_submitted" and state.job_id and state.output_prefix:
-                by_job.setdefault((state.job_id, state.output_prefix), []).append(asset_key)
+        for state in self.state.asset_states_with_event("ocr_job_submitted"):
+            if state.job_id and state.output_prefix and state.asset is not None:
+                by_job.setdefault((state.job_id, state.output_prefix), []).append(state.asset.key)
         completed = pending = 0
         for (_, output_prefix), asset_keys in by_job.items():
             output_uris = self.output_uris(output_prefix)

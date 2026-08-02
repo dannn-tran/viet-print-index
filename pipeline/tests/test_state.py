@@ -12,7 +12,7 @@ from vie_doc_pipeline.ledger.events import (
     source_fetched,
     source_inverted,
 )
-from vie_doc_pipeline.ledger.projection import AppState, ConfigurationMismatchError, eligible_source_assets
+from vie_doc_pipeline.ledger.projection import AppState, ConfigurationMismatchError
 from vie_doc_pipeline.ledger.store import EventStore
 from vie_doc_pipeline.assets import ImageAsset
 
@@ -57,6 +57,16 @@ class AppStateTest(unittest.TestCase):
             self.assertEqual(state.inversion_overrides.source_ids, frozenset({"issue-001"}))
             self.assertEqual(state.inversion_overrides.image_keys, frozenset({"pub/issue-001/001"}))
 
+    def test_source_override_does_not_create_an_asset_lifecycle_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            store = EventStore.open(Path(temporary_directory) / "state.jsonl")
+            store.append(source_inverted("issue-001"))
+
+            state = AppState.replay(store)
+
+            self.assertEqual(state.asset_keys(), ())
+            self.assertEqual(state.inversion_overrides.source_ids, frozenset({"issue-001"}))
+
     def test_appends_inspectable_events_and_reconstructs_current_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "state.jsonl"
@@ -76,7 +86,12 @@ class AppStateTest(unittest.TestCase):
             lines = path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 4)
             self.assertEqual(json.loads(lines[0])["event"], "source_discovered")
-            self.assertEqual(AppState.replay(store).current[asset.key].job_id, "operation-1")
+            projected = AppState.replay(store).asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertEqual(projected.job_id if projected else None, "operation-1")
+            state = AppState.replay(store)
+            self.assertEqual(state.asset_keys(), (asset.key,))
+            self.assertEqual(state.asset_states()[0].asset, asset)
             self.assertEqual(len(list(store.iter_events())), 4)
 
     def test_failure_keeps_last_successful_lifecycle_phase(self) -> None:
@@ -88,10 +103,11 @@ class AppStateTest(unittest.TestCase):
             )))
             asset_key = "pub/issue/001"
             store.append(failed(asset_key, stage="fetch", error="temporary failure"))
-            current = AppState.replay(store).current[asset_key]
-            self.assertEqual(current.event, "source_discovered")
-            self.assertIsNotNone(current.failure)
-            self.assertEqual(current.failure.stage if current.failure else None, "fetch")
+            projected = AppState.replay(store).asset_state(asset_key)
+            self.assertIsNotNone(projected)
+            self.assertEqual(projected.event, "source_discovered")
+            self.assertIsNotNone(projected.failure)
+            self.assertEqual(projected.failure.stage if projected.failure else None, "fetch")
 
     def test_permanent_failure_is_not_eligible_for_restart(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -100,7 +116,7 @@ class AppStateTest(unittest.TestCase):
             store = EventStore.open(path)
             store.append(source_discovered(asset))
             store.append(failed(asset.key, stage="fetch", error="HTTP 404", retryable=False))
-            self.assertEqual(eligible_source_assets(AppState.replay(store).current), [])
+            self.assertEqual(AppState.replay(store).eligible_source_assets(), ())
 
     def test_successful_retry_clears_prior_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -110,7 +126,9 @@ class AppStateTest(unittest.TestCase):
             store.append(source_discovered(asset))
             store.append(failed(asset.key, stage="fetch", error="timeout"))
             store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
-            self.assertIsNone(AppState.replay(store).current[asset.key].failure)
+            projected = AppState.replay(store).asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertIsNone(projected.failure if projected else None)
 
     def test_rejects_unknown_event_shape_at_event_store_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

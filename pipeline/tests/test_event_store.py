@@ -17,10 +17,14 @@ class EventStoreTest(unittest.TestCase):
             store.append(source_discovered(asset))
 
             state = AppState.replay(store)
-            self.assertEqual(state.current[asset.key].asset, asset)
+            projected = state.asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertEqual(projected.asset if projected else None, asset)
 
             state.record(image_normalized(asset))
-            self.assertEqual(state.current[asset.key].event, "image_normalized")
+            projected = state.asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertEqual(projected.event if projected else None, "image_normalized")
             self.assertEqual(len(list(store.iter_events())), 2)
 
     def test_concurrent_appends_remain_parseable(self) -> None:
@@ -46,7 +50,9 @@ class EventStoreTest(unittest.TestCase):
 
             state = AppState.replay(EventStore.open(path))
 
-            self.assertTrue(state.current[asset.key].asset)
+            projected = state.asset_state(asset.key)
+            self.assertIsNotNone(projected)
+            self.assertTrue(projected.asset if projected else None)
             self.assertEqual(len(list(store.iter_events())), 1)
 
     def test_first_event_reads_only_the_initial_record(self) -> None:

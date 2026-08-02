@@ -42,7 +42,7 @@ def discover_source_assets(
 ) -> list[SourceAsset]:
     """Discover external source records that are not already recorded."""
     with open_source_items(config) as source_items:
-        known_asset_keys = set(state.current)
+        known_asset_keys = set(state.asset_keys())
         new_assets: list[SourceAsset] = []
         for item in islice(source_items.iter_source_items(), limit):
             asset = asset_from_source_item(config, item)

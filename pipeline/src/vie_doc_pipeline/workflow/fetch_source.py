@@ -15,7 +15,7 @@ from google.api_core import exceptions as google_exceptions
 
 from vie_doc_pipeline.ledger.events import EventRecord, failed, source_fetched
 from vie_doc_pipeline.ledger.locking import LockUnavailableError
-from vie_doc_pipeline.ledger.projection import AppState, CurrentState, eligible_source_assets
+from vie_doc_pipeline.ledger.projection import AppState
 from vie_doc_pipeline.config import PipelineConfig
 from vie_doc_pipeline.sources.http import HttpClient, SourceHttpError, TransientSourceError, http_client
 from vie_doc_pipeline.assets import SourceAsset
@@ -100,8 +100,7 @@ def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | No
     """Fetch discovered source assets into the configured target."""
     with _source_fetch_lock(state):
         with open_target_store(config.target) as store:
-            current = state.current
-            assets = iter_fetch_candidates(current, limit)
+            assets = islice(state.eligible_source_assets(), limit)
             client = http_client(config.source_requests)
             try:
                 context = FetchContext(
@@ -117,16 +116,6 @@ def fetch_source_assets(config: PipelineConfig, state: AppState, limit: int | No
                 return summarize_fetches(recorded)
             finally:
                 client.close()
-
-
-def iter_fetch_candidates(
-    current: CurrentState,
-    limit: int | None,
-) -> Iterator[SourceAsset]:
-    """Yield source assets eligible for another fetch attempt."""
-    assets = (state.asset for state in eligible_source_assets(current) if state.asset is not None)
-    yield from islice(assets, limit)
-
 
 @contextmanager
 def _source_fetch_lock(state: AppState) -> Iterator[None]:

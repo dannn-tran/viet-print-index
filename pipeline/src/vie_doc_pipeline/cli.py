@@ -58,10 +58,10 @@ def status(
 ) -> None:
     """Summarise current workflow lifecycle and review states."""
     _, state, state_path = _open_run(config_path, state_path)
-    current = state.current
-    counts = Counter(item.event or "untracked" for item in current.values())
-    review = sum(1 for item in current.values() if item.asset and item.asset.needs_review)
-    print(f"Assets      : {len(current)}")
+    assets = state.asset_states()
+    counts = Counter(item.event or "untracked" for item in assets)
+    review = sum(1 for item in assets if item.asset and item.asset.needs_review)
+    print(f"Assets      : {len(assets)}")
     for event, count in sorted(counts.items()):
         print(f"  {event:<22} {count:>6}")
     print(f"Needs review: {review}")
@@ -139,8 +139,7 @@ def images_review(
 ) -> None:
     """List normalized images that were retained unchanged for manual review."""
     config, state, state_path = _open_run(config_path, state_path)
-    current = state.current
-    flagged = [(key, item) for key, item in current.items() if item.asset and item.asset.needs_review]
+    flagged = [(item.asset.key, item) for item in state.asset_states() if item.asset and item.asset.needs_review]
     if not flagged:
         print("No images need review.")
         return
