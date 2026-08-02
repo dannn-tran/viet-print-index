@@ -53,7 +53,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             event_store = EventStore.open(state_path)
             event_store.append(source_discovered(asset))
             event_store.append(source_fetched(asset, checksum="checksum", size_bytes=10))
-            state = AppState.replay(event_store)
+            state = AppState.open(state_path, None)
             store = _FakeTargetStore()
 
             with patch("vie_doc_pipeline.workflow.normalize_images.open_target_store", return_value=nullcontext(store)), \
@@ -94,7 +94,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.jsonl"
             store = EventStore.open(state_path)
-            state = AppState.replay(store)
+            state = AppState.open(state_path, None)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
@@ -118,7 +118,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.jsonl"
             store = EventStore.open(state_path)
-            state = AppState.replay(store)
+            state = AppState.open(state_path, None)
             with patch(
                 "vie_doc_pipeline.workflow.discover_source.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),

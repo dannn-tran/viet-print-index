@@ -12,11 +12,12 @@ from vie_doc_pipeline.ledger.store import EventStore
 class EventStoreTest(unittest.TestCase):
     def test_replay_streams_events_and_record_updates_store_and_projection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            store = EventStore.open(Path(directory) / "state.jsonl")
+            path = Path(directory) / "state.jsonl"
+            store = EventStore.open(path)
             asset = ImageAsset("pub", "issue", "001", "https://example.test/1.jpg", "pub/images/1.jpg")
             store.append(source_discovered(asset))
 
-            state = AppState.replay(store)
+            state = AppState.open(path, None)
             projected = state.asset_state(asset.key)
             self.assertIsNotNone(projected)
             self.assertEqual(projected.asset if projected else None, asset)
@@ -48,7 +49,7 @@ class EventStoreTest(unittest.TestCase):
             with path.open("ab") as handle:
                 handle.write(b'{"event":"source_discovered"')
 
-            state = AppState.replay(EventStore.open(path))
+            state = AppState.open(path, None)
 
             projected = state.asset_state(asset.key)
             self.assertIsNotNone(projected)

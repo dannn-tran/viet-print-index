@@ -107,17 +107,12 @@ class AppState:
         )
 
     @classmethod
-    def replay(cls, event_store: EventStore) -> "AppState":
-        """Rebuild the projection by applying persisted events in order."""
+    def open(cls, state_path: Path, config_toml: str | None) -> "AppState":
+        """Open, replay, and bind one application state to its configuration."""
+        event_store = EventStore.open(state_path)
         state = cls(event_store, {})
         for event in event_store.iter_events():
             state._apply(event)
-        return state
-
-    @classmethod
-    def open(cls, state_path: Path, config_toml: str | None) -> "AppState":
-        """Open, replay, and bind one application state to its configuration."""
-        state = cls.replay(EventStore.open(state_path))
         state.bind_configuration(config_toml)
         return state
 

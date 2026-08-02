@@ -35,7 +35,7 @@ class OcrStateTest(unittest.TestCase):
             store = EventStore.open(path)
             store.append(source_discovered(asset))
             store.append(ocr_job_submitted([asset.key], job_id="job-1", output_prefix="gs://bucket/pub/ocr/job-1")[0])
-            state = AppState.replay(store)
+            state = AppState.open(path, None)
             with patch("vie_doc_pipeline.workflow.ocr.storage.Client", return_value=client):
                 summary = check_ocr_status(config, state)
 
