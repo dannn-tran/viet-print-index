@@ -13,29 +13,35 @@ from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.state import PipelineState
 
 
-def _asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) -> SourceAsset:
-    """Convert one source-provider record into a durable asset identity."""
-    if item.kind == "image":
-        if not item.issue_id or not item.page_id:
-            raise ValueError(f"Image source item is missing issue/page identity: {item.source_url}")
-        return ImageAsset(
-            publication_id=config.publication.id,
-            issue_id=item.issue_id,
-            page_id=item.page_id,
+@dataclass(frozen=True)
+class SourceItemAssetMapper:
+    """Map typed source-provider records using one run's configuration."""
+
+    config: PipelineConfig
+
+    def to_asset(self, item: DiscoveredSourceItem) -> SourceAsset:
+        """Convert one source-provider record into a durable asset identity."""
+        if item.kind == "image":
+            if not item.issue_id or not item.page_id:
+                raise ValueError(f"Image source item is missing issue/page identity: {item.source_url}")
+            return ImageAsset(
+                publication_id=self.config.publication.id,
+                issue_id=item.issue_id,
+                page_id=item.page_id,
+                source_url=item.source_url,
+                target_path=f"{self.config.target.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
+                width=item.width,
+                height=item.height,
+                issue_label=item.issue_label,
+            )
+        filename = PurePosixPath(urllib.parse.urlsplit(item.source_url).path).name or PurePosixPath(item.source_url).name
+        document_id = urllib.parse.unquote(filename).removesuffix(".pdf")
+        return PdfAsset(
+            publication_id=self.config.publication.id,
+            document_id=document_id,
             source_url=item.source_url,
-            target_path=f"{config.target.images_prefix}/{item.issue_label or item.issue_id}/{item.page_id}.jpg",
-            width=item.width,
-            height=item.height,
-            issue_label=item.issue_label,
+            target_path=f"{self.config.target.pdf_prefix}/{filename}",
         )
-    filename = PurePosixPath(urllib.parse.urlsplit(item.source_url).path).name or PurePosixPath(item.source_url).name
-    document_id = urllib.parse.unquote(filename).removesuffix(".pdf")
-    return PdfAsset(
-        publication_id=config.publication.id,
-        document_id=document_id,
-        source_url=item.source_url,
-        target_path=f"{config.target.pdf_prefix}/{filename}",
-    )
 
 
 @dataclass(frozen=True)
@@ -47,11 +53,12 @@ class SourceAssetDiscoveryService:
     def execute(self, max_items: int | None = None) -> list[SourceAsset]:
         """Discover external source records that are not already recorded."""
         config = self.state.configuration
+        mapper = SourceItemAssetMapper(config)
         with open_source_item_provider(config) as source_item_provider:
             known_asset_keys = set(self.state.asset_keys())
             new_assets: list[SourceAsset] = []
             for item in islice(source_item_provider.iter_source_items(), max_items):
-                asset = _asset_from_source_item(config, item)
+                asset = mapper.to_asset(item)
                 if asset.key not in known_asset_keys:
                     self.state.record(source_discovered(asset))
                     known_asset_keys.add(asset.key)

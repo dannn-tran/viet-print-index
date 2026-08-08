@@ -18,7 +18,7 @@ from vie_doc_pipeline.common.config import (
     WebPagePdfSource,
 )
 from vie_doc_pipeline.images.pdf import ExplodeParams
-from vie_doc_pipeline.sources.discover import SourceAssetDiscoveryService, _asset_from_source_item
+from vie_doc_pipeline.sources.discover import SourceAssetDiscoveryService, SourceItemAssetMapper
 from vie_doc_pipeline.images.normalize import ImageNormalizationService
 
 
@@ -34,7 +34,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
 
         source_item = Mock(kind="pdf", source_url="https://example.test/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
-        asset = _asset_from_source_item(config, source_item)
+        asset = SourceItemAssetMapper(config).to_asset(source_item)
 
         self.assertEqual(asset.document_id, "Tuần báo 001")
         self.assertEqual(asset.target_path, "doi-moi/pdf/Tu%E1%BA%A7n%20b%C3%A1o%20001.pdf")
@@ -80,7 +80,7 @@ class AssetDiscoveryTest(unittest.TestCase):
         )
         item = Mock(kind="image", issue_id="WNyf19450905", issue_label="1945-09-05_WNyf19450905", page_id="001", source_url="https://example.test/001.jpg", width=10, height=20)
 
-        asset = _asset_from_source_item(config, item)
+        asset = SourceItemAssetMapper(config).to_asset(item)
 
         self.assertEqual(asset.target_path, "cuu-quoc/images/1945-09-05_WNyf19450905/001.jpg")
 
