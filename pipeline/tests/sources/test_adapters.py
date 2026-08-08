@@ -41,8 +41,8 @@ class SourceAdapterTest(unittest.TestCase):
         )
 
         with patch("vie_doc_pipeline.sources.factory.http_client") as open_http:
-            with open_source_item_provider(pipeline_config) as source_items:
-                urls = [item.source_url for item in source_items.iter_source_items()]
+            with open_source_item_provider(pipeline_config) as source_item_provider:
+                urls = [item.source_url for item in source_item_provider.iter_source_items()]
 
         open_http.assert_not_called()
 
@@ -69,8 +69,8 @@ class SourceAdapterTest(unittest.TestCase):
         http = _FakeHttpClient()
 
         with patch("vie_doc_pipeline.sources.factory.http_client", return_value=http) as open_http:
-            with open_source_item_provider(config) as source_items:
-                self.assertEqual(len(list(islice(source_items.iter_source_items(), 1))), 1)
+            with open_source_item_provider(config) as source_item_provider:
+                self.assertEqual(len(list(islice(source_item_provider.iter_source_items(), 1))), 1)
 
         open_http.assert_called_once_with(config.source_requests)
         self.assertTrue(http.closed)
