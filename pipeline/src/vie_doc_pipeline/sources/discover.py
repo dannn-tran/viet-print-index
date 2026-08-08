@@ -3,7 +3,7 @@
 from itertools import islice
 from pathlib import PurePosixPath
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from vie_doc_pipeline.common.assets import PdfAsset, SourceAsset, ImageAsset
 from vie_doc_pipeline.common.config import PipelineConfig
@@ -49,16 +49,19 @@ class SourceAssetDiscoveryService:
     """Discover source records and persist new source assets."""
 
     state: PipelineState
+    _mapper: SourceItemAssetMapper = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_mapper", SourceItemAssetMapper(self.state.configuration))
 
     def execute(self, max_items: int | None = None) -> list[SourceAsset]:
         """Discover external source records that are not already recorded."""
         config = self.state.configuration
-        mapper = SourceItemAssetMapper(config)
         with open_source_item_provider(config) as source_item_provider:
             known_asset_keys = set(self.state.asset_keys())
             new_assets: list[SourceAsset] = []
             for item in islice(source_item_provider.iter_source_items(), max_items):
-                asset = mapper.to_asset(item)
+                asset = self._mapper.to_asset(item)
                 if asset.key not in known_asset_keys:
                     self.state.record(source_discovered(asset))
                     known_asset_keys.add(asset.key)
