@@ -80,7 +80,7 @@ Each pipeline configuration has a file in `sources/<id>.toml`. Current configura
 ### Adding a new pipeline configuration
 
 1. Create `sources/<id>.toml` (copy an existing one as a template)
-2. Calibrate PDF extraction: `vie-pipeline images calibrate <id> --pdf <sample.pdf>`
+2. Calibrate PDF extraction: `vie-pipeline images calibrate <config-path> --pdf <sample.pdf>`
 3. Review `calibrate/<id>/` variants, update `[explode]` section in TOML
 4. Run the pipeline (see below)
 
@@ -156,7 +156,10 @@ threads. Temporary network failures and HTTP `429`, `500`, `502`, `503`, and
 are recorded as permanent failures. Each completed fetch is immediately
 written to the event store. Re-running `source fetch` resumes eligible work,
 skips target objects already present, and leaves permanent failures untouched.
-Only one source-fetch command may run for a configuration at once.
+Within one command, the orchestrator assigns each asset to one worker and
+records results centrally. The event-store lock protects atomic appends; it is
+not a cross-process task-claiming mechanism. Concurrent commands must partition
+their inputs or use separate state paths.
 
 ### Target storage
 
