@@ -10,6 +10,7 @@ from vie_doc_pipeline.sources.models import DiscoveredSourceItem, SourceItemProv
 from vie_doc_pipeline.common.config import (
     LocalPdfSource,
     PipelineConfig,
+    SourceRequestsConfig,
     UrlListPdfSource,
     UrlSequencePdfSource,
     VeridianSource,
@@ -69,8 +70,12 @@ class VeridianSourceItemProvider(SourceItemProvider):
     http: HttpClient
 
     @classmethod
-    def open(cls, source: VeridianSource, config: PipelineConfig) -> "VeridianSourceItemProvider":
-        return cls(source, http_client(config.source_requests))
+    def open(
+        cls,
+        source: VeridianSource,
+        request_policy: SourceRequestsConfig,
+    ) -> "VeridianSourceItemProvider":
+        return cls(source, http_client(request_policy))
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_veridian(self.source, self.http)
@@ -85,8 +90,12 @@ class WebPageSourceItemProvider(SourceItemProvider):
     http: HttpClient
 
     @classmethod
-    def open(cls, source: WebPagePdfSource, config: PipelineConfig) -> "WebPageSourceItemProvider":
-        return cls(source, http_client(config.source_requests))
+    def open(
+        cls,
+        source: WebPagePdfSource,
+        request_policy: SourceRequestsConfig,
+    ) -> "WebPageSourceItemProvider":
+        return cls(source, http_client(request_policy))
 
     def iter_source_items(self) -> Iterator[DiscoveredSourceItem]:
         yield from iter_source_items_from_web_page(
@@ -101,11 +110,12 @@ class WebPageSourceItemProvider(SourceItemProvider):
 @contextmanager
 def open_source_items(config: PipelineConfig) -> Iterator[SourceItemProvider]:
     """Open exactly the resources required to enumerate one configured source."""
+    request_policy = config.source_requests
     match config.source:
         case VeridianSource() as source:
-            provider = VeridianSourceItemProvider.open(source, config)
+            provider = VeridianSourceItemProvider.open(source, request_policy)
         case WebPagePdfSource() as source:
-            provider = WebPageSourceItemProvider.open(source, config)
+            provider = WebPageSourceItemProvider.open(source, request_policy)
         case UrlSequencePdfSource() as source:
             provider = UrlSequenceSourceItemProvider(source)
         case UrlListPdfSource() as source:
