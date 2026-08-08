@@ -30,14 +30,14 @@ class OcrJobSubmissionService:
 
     state: PipelineState
 
-    def execute(self, limit: int | None = None) -> OcrSubmissionSummary:
+    def execute(self, max_items: int | None = None) -> OcrSubmissionSummary:
         config = self.state.configuration
         target = _require_gcs_target(config.target)
         assets = list(islice((
             item.asset
             for item in self.state.asset_states_with_event("image_normalized")
             if isinstance(item.asset, ImageAsset)
-        ), limit))
+        ), max_items))
         if not assets:
             return OcrSubmissionSummary()
 

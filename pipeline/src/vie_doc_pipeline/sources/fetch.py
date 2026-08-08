@@ -99,11 +99,11 @@ class SourceAssetFetchService:
 
     state: PipelineState
 
-    def execute(self, limit: int | None = None) -> FetchSummary:
+    def execute(self, max_items: int | None = None) -> FetchSummary:
         """Fetch discovered source assets into the configured target."""
         config = self.state.configuration
         with open_target_store(config.target) as store:
-            assets = islice(self.state.eligible_source_assets(), limit)
+            assets = islice(self.state.eligible_source_assets(), max_items)
             client = http_client(config.source_requests)
             try:
                 context = _FetchContext(

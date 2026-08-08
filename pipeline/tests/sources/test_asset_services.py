@@ -111,7 +111,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             source=UrlListPdfSource(urls=("https://example.test/001.pdf",)),
             explode=ExplodeParams(),
             ocr=OcrConfig(),
-            config_toml="discovery-limit-test",
+            config_toml="discovery-max-items-test",
         )
         source_items = [
             Mock(kind="pdf", source_url="https://example.test/001.pdf"),
@@ -124,7 +124,7 @@ class AssetDiscoveryTest(unittest.TestCase):
                 "vie_doc_pipeline.sources.discover.open_source_items",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),
             ):
-                self.assertEqual(len(SourceAssetDiscoveryService(state).execute(limit=1)), 1)
+                self.assertEqual(len(SourceAssetDiscoveryService(state).execute(max_items=1)), 1)
 
 
 class _FakeTargetStore:

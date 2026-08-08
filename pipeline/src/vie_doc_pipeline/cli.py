@@ -33,7 +33,7 @@ app.add_typer(images_app, name="images")
 app.add_typer(ocr_app, name="ocr")
 
 _ConfigPath = Annotated[Path, typer.Argument(help="Pipeline TOML configuration path")]
-_Limit = Annotated[Optional[int], typer.Option(help="Process only first N items")]
+_MaxItems = Annotated[Optional[int], typer.Option("--max-items", help="Process at most N items")]
 _StatePath = Annotated[Optional[Path], typer.Option("--state-path", help="Event-store state path")]
 
 
@@ -70,12 +70,12 @@ def status(
 @source_app.command("discover")
 def source_discover(
     config_path: _ConfigPath,
-    limit: _Limit = None,
+    max_items: _MaxItems = None,
     state_path: _StatePath = None,
 ) -> None:
     """Discover external source records into the event store."""
     state, state_path = _open_run(config_path, state_path)
-    assets = SourceAssetDiscoveryService(state).execute(limit=limit)
+    assets = SourceAssetDiscoveryService(state).execute(max_items=max_items)
     print(f"Discovered  : {len(assets)}")
     print(f"State file  : {state_path}")
 
@@ -83,12 +83,12 @@ def source_discover(
 @source_app.command("fetch")
 def source_fetch(
     config_path: _ConfigPath,
-    limit: _Limit = None,
+    max_items: _MaxItems = None,
     state_path: _StatePath = None,
 ) -> None:
     """Fetch discovered original source assets into target storage."""
     state, state_path = _open_run(config_path, state_path)
-    summary = SourceAssetFetchService(state).execute(limit=limit)
+    summary = SourceAssetFetchService(state).execute(max_items=max_items)
     print(f"Fetched     : {summary.fetched}")
     print(f"Already present: {summary.already_present}")
     print(f"Failed      : {summary.failed}")
@@ -98,7 +98,7 @@ def source_fetch(
 @images_app.command("normalize")
 def images_normalize(
     config_path: _ConfigPath,
-    limit: _Limit = None,
+    max_items: _MaxItems = None,
     state_path: _StatePath = None,
     source_id: Annotated[Optional[str], typer.Option(help="Issue or PDF identifier to normalize")] = None,
     image_id: Annotated[Optional[str], typer.Option(help="Event-store image asset key to normalize")] = None,
@@ -115,7 +115,7 @@ def images_normalize(
                 state.record(image_inverted(selection.image_key))
             case AllNormalizationCandidates():
                 raise typer.BadParameter("--inverted requires --source-id or --image-id")
-    summary = ImageNormalizationService(state).execute(limit=limit, selection=selection)
+    summary = ImageNormalizationService(state).execute(max_items=max_items, selection=selection)
     print(f"Images created: {summary.created}")
     print(f"Native images : {summary.native_registered} (registered without copying)")
     print(f"Failed        : {summary.failed}")
@@ -166,12 +166,12 @@ def images_calibrate(
 @ocr_app.command("submit-jobs")
 def ocr_submit_jobs(
     config_path: _ConfigPath,
-    limit: _Limit = None,
+    max_items: _MaxItems = None,
     state_path: _StatePath = None,
 ) -> None:
     """Submit OCR jobs for normalized image assets without waiting."""
     state, state_path = _open_run(config_path, state_path)
-    summary = OcrJobSubmissionService(state).execute(limit=limit)
+    summary = OcrJobSubmissionService(state).execute(max_items=max_items)
     print(f"Submitted   : {summary.submitted} images")
     print(f"State file  : {state_path}")
 

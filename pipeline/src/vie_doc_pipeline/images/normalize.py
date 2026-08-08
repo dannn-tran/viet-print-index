@@ -67,14 +67,14 @@ class ImageNormalizationService:
 
     def execute(
         self,
-        limit: int | None = None,
+        max_items: int | None = None,
         selection: NormalizationSelection = AllNormalizationCandidates(),
     ) -> NormalizationSummary:
         """Create image assets from PDFs or designate native images without copying."""
         config = self.state.configuration
         with open_target_store(config.target) as store:
             overrides = self.state.inversion_overrides
-            assets = _iter_normalization_candidates(self.state, selection, limit)
+            assets = _iter_normalization_candidates(self.state, selection, max_items)
             context = _NormalizationContext(self.state, store, overrides)
             results = (_normalize_asset(context, asset) for asset in assets)
             return _summarize_normalization(results)
@@ -83,7 +83,7 @@ class ImageNormalizationService:
 def _iter_normalization_candidates(
     state: PipelineState,
     selection: NormalizationSelection,
-    limit: int | None,
+    max_items: int | None,
 ) -> Iterator[SourceAsset]:
     """Yield source assets selected for normalisation or explicit reprocessing."""
     match selection:
@@ -93,7 +93,7 @@ def _iter_normalization_candidates(
             candidates = (asset for _, asset in state.reprocessable_assets() if _source_id(asset) == selection.source_id)
         case ImageNormalizationCandidates():
             candidates = (asset for key, asset in state.reprocessable_assets() if key == selection.image_key)
-    yield from islice(candidates, limit)
+    yield from islice(candidates, max_items)
 
 
 def _normalize_asset(

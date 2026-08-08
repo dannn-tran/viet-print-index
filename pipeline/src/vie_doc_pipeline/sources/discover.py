@@ -44,13 +44,13 @@ class SourceAssetDiscoveryService:
 
     state: PipelineState
 
-    def execute(self, limit: int | None = None) -> list[SourceAsset]:
+    def execute(self, max_items: int | None = None) -> list[SourceAsset]:
         """Discover external source records that are not already recorded."""
         config = self.state.configuration
         with open_source_items(config) as source_items:
             known_asset_keys = set(self.state.asset_keys())
             new_assets: list[SourceAsset] = []
-            for item in islice(source_items.iter_source_items(), limit):
+            for item in islice(source_items.iter_source_items(), max_items):
                 asset = _asset_from_source_item(config, item)
                 if asset.key not in known_asset_keys:
                     self.state.record(source_discovered(asset))

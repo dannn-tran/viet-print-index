@@ -13,8 +13,8 @@ restart semantics, and examples are documented in the repository [README](../REA
 For example:
 
 ```sh
-vie-pipeline source discover sources/nlv-cuu-quoc.toml --limit 10
-vie-pipeline source fetch sources/nlv-cuu-quoc.toml --limit 10
+vie-pipeline source discover sources/nlv-cuu-quoc.toml --max-items 10
+vie-pipeline source fetch sources/nlv-cuu-quoc.toml --max-items 10
 vie-pipeline images normalize sources/nlv-cuu-quoc.toml
 vie-pipeline ocr submit-jobs sources/nlv-cuu-quoc.toml
 vie-pipeline ocr check-status sources/nlv-cuu-quoc.toml

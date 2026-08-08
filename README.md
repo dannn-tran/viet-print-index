@@ -107,7 +107,7 @@ vie-pipeline ocr check-status <config-path> # report completed/pending OCR outpu
 
 - Source adapters only enumerate source items. They do not apply CLI batch
   limits, write the event store, or create target objects.
-- Each workflow stage applies `--limit` once, immediately after selecting its
+- Each workflow stage applies `--max-items` once, immediately after selecting its
   candidate assets and before performing external work.
 - TOML is decoded into a validated source variant before discovery. A Veridian
   source, a PDF index page, a URL sequence, a URL list, and a local directory
@@ -222,10 +222,10 @@ normalization is registered in place, without a duplicate target object.
 
 ```sh
 # Discover full-page source assets into an inspectable event store
-vie-pipeline source discover sources/nlv-cuu-quoc.toml --limit 10
+vie-pipeline source discover sources/nlv-cuu-quoc.toml --max-items 10
 
 # Fetch only discovered-but-not-yet-fetched originals.
-vie-pipeline source fetch sources/nlv-cuu-quoc.toml --limit 10
+vie-pipeline source fetch sources/nlv-cuu-quoc.toml --max-items 10
 
 # Inspect and register native images for presentation and OCR.
 vie-pipeline images normalize sources/nlv-cuu-quoc.toml
