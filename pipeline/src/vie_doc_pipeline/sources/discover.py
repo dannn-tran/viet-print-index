@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from vie_doc_pipeline.common.assets import PdfAsset, SourceAsset, ImageAsset
 from vie_doc_pipeline.common.config import PipelineConfig
 from vie_doc_pipeline.sources.models import DiscoveredSourceItem
-from vie_doc_pipeline.sources.factory import open_source_items
+from vie_doc_pipeline.sources.factory import open_source_item_provider
 from vie_doc_pipeline.ledger.events import source_discovered
 from vie_doc_pipeline.state import PipelineState
 
@@ -38,7 +38,7 @@ def _asset_from_source_item(config: PipelineConfig, item: DiscoveredSourceItem) 
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class SourceAssetDiscoveryService:
     """Discover source records and persist new source assets."""
 
@@ -47,7 +47,7 @@ class SourceAssetDiscoveryService:
     def execute(self, max_items: int | None = None) -> list[SourceAsset]:
         """Discover external source records that are not already recorded."""
         config = self.state.configuration
-        with open_source_items(config) as source_items:
+        with open_source_item_provider(config) as source_items:
             known_asset_keys = set(self.state.asset_keys())
             new_assets: list[SourceAsset] = []
             for item in islice(source_items.iter_source_items(), max_items):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -108,7 +108,7 @@ class WebPageSourceItemProvider(SourceItemProvider):
 
 
 @contextmanager
-def open_source_items(config: PipelineConfig) -> Iterator[SourceItemProvider]:
+def open_source_item_provider(config: PipelineConfig) -> Generator[SourceItemProvider, None, None]:
     """Open exactly the resources required to enumerate one configured source."""
     request_policy = config.source_requests
     match config.source:

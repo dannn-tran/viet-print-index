@@ -93,7 +93,7 @@ class _FetchContext:
         return result
 
 
-@dataclass
+@dataclass(frozen=True)
 class SourceAssetFetchService:
     """Fetch discovered source assets and persist the outcomes."""
 

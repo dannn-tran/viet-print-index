@@ -6,7 +6,7 @@ from unittest.mock import patch
 from vie_doc_pipeline.common.config import GcsTarget, OcrConfig, PipelineConfig, PublicationConfig, UrlSequencePdfSource, VeridianSource
 from vie_doc_pipeline.images.pdf import ExplodeParams
 from vie_doc_pipeline.sources.http import _encode_url
-from vie_doc_pipeline.sources.factory import open_source_items
+from vie_doc_pipeline.sources.factory import open_source_item_provider
 
 
 class SourceAdapterTest(unittest.TestCase):
@@ -41,7 +41,7 @@ class SourceAdapterTest(unittest.TestCase):
         )
 
         with patch("vie_doc_pipeline.sources.factory.http_client") as open_http:
-            with open_source_items(pipeline_config) as source_items:
+            with open_source_item_provider(pipeline_config) as source_items:
                 urls = [item.source_url for item in source_items.iter_source_items()]
 
         open_http.assert_not_called()
@@ -69,7 +69,7 @@ class SourceAdapterTest(unittest.TestCase):
         http = _FakeHttpClient()
 
         with patch("vie_doc_pipeline.sources.factory.http_client", return_value=http) as open_http:
-            with open_source_items(config) as source_items:
+            with open_source_item_provider(config) as source_items:
                 self.assertEqual(len(list(islice(source_items.iter_source_items(), 1))), 1)
 
         open_http.assert_called_once_with(config.source_requests)

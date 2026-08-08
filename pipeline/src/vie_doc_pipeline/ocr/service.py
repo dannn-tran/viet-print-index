@@ -1,5 +1,6 @@
 """Submit and check asynchronous OCR jobs for image assets."""
 
+from collections.abc import Generator
 from itertools import islice
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ class OcrSubmissionSummary:
     submitted: int = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class OcrJobSubmissionService:
     """Submit OCR jobs for normalized image assets."""
 
@@ -55,7 +56,7 @@ class OcrJobSubmissionService:
         return OcrSubmissionSummary(submitted=len(assets))
 
 
-@dataclass
+@dataclass(frozen=True)
 class OcrStatusService:
     """Check durable storage for completed OCR results."""
 
@@ -95,7 +96,7 @@ class _OcrStatusSession:
 
 
 @contextmanager
-def _open_ocr_status_session(state: PipelineState):
+def _open_ocr_status_session(state: PipelineState) -> Generator[_OcrStatusSession, None, None]:
     target = _require_gcs_target(state.configuration.target)
     client = storage.Client(project=target.project)
     try:

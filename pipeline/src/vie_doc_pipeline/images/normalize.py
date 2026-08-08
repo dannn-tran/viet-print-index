@@ -59,7 +59,7 @@ class _NormalizationContext:
     overrides: InversionOverrides
 
 
-@dataclass
+@dataclass(frozen=True)
 class ImageNormalizationService:
     """Create or designate durable image assets for presentation and OCR."""
 

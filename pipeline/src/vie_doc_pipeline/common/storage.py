@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 
 from google.cloud import storage as gcs_storage
 
@@ -94,7 +94,7 @@ class GcsTargetStore(TargetStore):
 
 
 @contextmanager
-def open_target_store(target: TargetStorage) -> Iterator[TargetStore]:
+def open_target_store(target: TargetStorage) -> Generator[TargetStore, None, None]:
     """Open the configured target and close it at the workflow boundary."""
     match target:
         case LocalTarget():

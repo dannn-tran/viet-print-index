@@ -5,11 +5,11 @@ from __future__ import annotations
 import fcntl
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Generator
 
 
 @contextmanager
-def _advisory_file_lock(path: Path) -> Iterator[None]:
+def _advisory_file_lock(path: Path) -> Generator[None, None, None]:
     """Hold an advisory exclusive lock for one atomic file operation."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:

@@ -98,7 +98,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             state = PipelineState.open(state_path, config)
             source_item = Mock(kind="pdf", source_url="https://example.test/001.pdf")
             with patch(
-                "vie_doc_pipeline.sources.discover.open_source_items",
+                "vie_doc_pipeline.sources.discover.open_source_item_provider",
                 return_value=nullcontext(_FakeSourceItemProvider([source_item])),
             ):
                 self.assertEqual(len(SourceAssetDiscoveryService(state).execute()), 1)
@@ -121,7 +121,7 @@ class AssetDiscoveryTest(unittest.TestCase):
             state_path = Path(directory) / "state.jsonl"
             state = PipelineState.open(state_path, config)
             with patch(
-                "vie_doc_pipeline.sources.discover.open_source_items",
+                "vie_doc_pipeline.sources.discover.open_source_item_provider",
                 return_value=nullcontext(_FakeSourceItemProvider(source_items)),
             ):
                 self.assertEqual(len(SourceAssetDiscoveryService(state).execute(max_items=1)), 1)
